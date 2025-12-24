@@ -10,6 +10,7 @@ g++ -o Aegis.exe ^
     Utils/Utils.cpp ^
     Utils/Network.cpp ^
     Utils/Keyboard.cpp ^
+    Utils/HashPassword.cpp ^
     Components/MessageInput.cpp ^
     Components/Sidebar.cpp ^
     Components/MessageList.cpp ^
@@ -19,7 +20,7 @@ g++ -o Aegis.exe ^
     -I"%PG_PATH%\include" ^
     -I. ^
     "%PG_PATH%\bin\libpq.dll" ^
-    -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -mwindows -std=c++17
+    -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -lbcrypt -mwindows -std=c++17
 
 if %ERRORLEVEL% == 0 (
     echo Build successful!

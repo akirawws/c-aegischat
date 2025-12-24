@@ -2,7 +2,8 @@
 #include "Utils/Styles.h"
 #include "Utils/Utils.h"
 #include "Utils/Network.h"
-#include "Utils/AuthProtocol.h" // Подключаем созданный протокол
+#include "Utils/AuthProtocol.h"
+#include "Utils/HashPassword.h"
 #include <cstring>
 #include <string>
 
@@ -123,9 +124,7 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             GetWindowTextA(hNameEdit, name, 256);
             GetWindowTextA(hPassEdit, pass, 256);
 
-            // Подготовка пакета протокола
-            AuthPacket packet = { 0 };
-            
+            // 1. Проверки для регистрации
             if (currentAuthState == STATE_REGISTER) {
                 GetWindowTextA(hEmailEdit, email, 256);
                 GetWindowTextA(hPassConfirmEdit, passConf, 256);
@@ -134,32 +133,36 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                     MessageBoxW(hwnd, L"Имя > 3, Пароль > 6 символов", L"Ошибка", MB_ICONERROR);
                     break;
                 }
-                if (strstr(email, "@") == NULL || strstr(email, ".") == NULL) {
-                    MessageBoxW(hwnd, L"Некорректный Email", L"Ошибка", MB_ICONERROR);
-                    break;
-                }
                 if (strcmp(pass, passConf) != 0) {
                     MessageBoxW(hwnd, L"Пароли не совпадают", L"Ошибка", MB_ICONERROR);
                     break;
                 }
+            }
 
+            // 2. ХЕШИРОВАНИЕ ПАРОЛЯ
+            // Используем имя пользователя (name) в качестве соли. 
+            // Это гарантирует, что даже одинаковые пароли у разных юзеров будут иметь разные хеши.
+            std::string hashedPassword = HashPassword(pass, name);
+
+            // 3. Подготовка пакета
+            AuthPacket packet = { 0 };
+            if (currentAuthState == STATE_REGISTER) {
                 packet.type = PACKET_REGISTER;
                 strncpy(packet.email, email, sizeof(packet.email) - 1);
             } else {
                 packet.type = PACKET_LOGIN;
             }
 
-            // Заполняем общие данные пакета
             strncpy(packet.username, name, sizeof(packet.username) - 1);
-            // Здесь желательно передавать HashString(pass), но пока передаем текст
-            strncpy(packet.password, pass, sizeof(packet.password) - 1); 
+            
+            // ВАЖНО: Копируем именно hashedPassword вместо чистого pass
+            strncpy(packet.password, hashedPassword.c_str(), sizeof(packet.password) - 1); 
+            
             packet.rememberMe = (SendMessage(hRememberCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
-            // Отправка через сетевой модуль
+            // 4. Отправка и обработка ответа
             if (SendPacket((char*)&packet, sizeof(AuthPacket))) {
                 ResponsePacket response = { 0 };
-                
-                // Получаем ответ от сервера
                 if (ReceivePacket((char*)&response, sizeof(ResponsePacket))) {
                     if (response.success) {
                         if (currentAuthState == STATE_REGISTER) {
@@ -167,9 +170,8 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             currentAuthState = STATE_LOGIN;
                             ToggleAuthMode(hwnd);
                         } else {
-                            // Вход успешен
                             userName = name; 
-                            StartMessageSystem();
+                            StartMessageSystem(); // Запуск фонового потока чата
                             WriteLog("User logged in: " + userName);
                             ShowWindow(hwnd, SW_HIDE);
                             ShowWindow(hMainWnd, SW_SHOW);

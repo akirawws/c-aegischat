@@ -12,6 +12,9 @@ g++ -o Aegis.exe ^
     Components/MessageList.cpp ^
     Pages/ConnectPage.cpp ^
     Pages/MainPage.cpp ^
+    Pages/FriendsPage.cpp ^
+    -I"C:/Program Files/PostgreSQL/16/include" ^
+    -L"C:/Program Files/PostgreSQL/16/lib" ^
     -I. ^
     -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -mwindows -std=c++17
 

@@ -125,3 +125,43 @@
 [19:47:01] Registering class: MessageListWindow
 [19:47:01] Class MessageListWindow registered successfully.
 [19:47:03] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:50:24] --- APP START ---
+[19:50:24] Registering class: ConnectWindow
+[19:50:24] Class ConnectWindow registered successfully.
+[19:50:24] Registering class: MainWindow
+[19:50:24] Class MainWindow registered successfully.
+[19:50:24] Registering class: SidebarWindow
+[19:50:24] Class SidebarWindow registered successfully.
+[19:50:24] Registering class: MessageListWindow
+[19:50:24] Class MessageListWindow registered successfully.
+[19:50:27] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:56:02] --- APP START ---
+[19:56:02] Registering class: ConnectWindow
+[19:56:02] Class ConnectWindow registered successfully.
+[19:56:02] Registering class: MainWindow
+[19:56:02] Class MainWindow registered successfully.
+[19:56:02] Registering class: SidebarWindow
+[19:56:02] Class SidebarWindow registered successfully.
+[19:56:02] Registering class: MessageListWindow
+[19:56:02] Class MessageListWindow registered successfully.
+[19:56:06] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[20:03:53] --- APP START ---
+[20:03:53] Registering class: ConnectWindow
+[20:03:53] Class ConnectWindow registered successfully.
+[20:03:53] Registering class: MainWindow
+[20:03:53] Class MainWindow registered successfully.
+[20:03:53] Registering class: SidebarWindow
+[20:03:53] Class SidebarWindow registered successfully.
+[20:03:53] Registering class: MessageListWindow
+[20:03:53] Class MessageListWindow registered successfully.
+[20:03:58] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[20:06:39] --- APP START ---
+[20:06:39] Registering class: ConnectWindow
+[20:06:39] Class ConnectWindow registered successfully.
+[20:06:39] Registering class: MainWindow
+[20:06:39] Class MainWindow registered successfully.
+[20:06:39] Registering class: SidebarWindow
+[20:06:39] Class SidebarWindow registered successfully.
+[20:06:39] Registering class: MessageListWindow
+[20:06:39] Class MessageListWindow registered successfully.
+[20:06:42] Connect button clicked. Target: xisyrurdm.localto.net:6162

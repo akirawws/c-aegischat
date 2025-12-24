@@ -3,7 +3,7 @@
 
 #include <libpq-fe.h>
 #include <string>
-#include <vector>
+#include <map>
 
 class Database {
 public:
@@ -13,13 +13,13 @@ public:
     bool Connect();
     void Disconnect();
     
-    bool Execute(const std::string& query);
-    
-    PGresult* Query(const std::string& query);
+    // Новые методы для авторизации
+    bool RegisterUser(const std::string& user, const std::string& email, const std::string& pass);
+    bool AuthenticateUser(const std::string& login, const std::string& pass);
 
 private:
     PGconn* conn;
-    std::string connInfo;
+    std::map<std::string, std::string> LoadEnv(const std::string& filename);
 };
 
 #endif

@@ -5,49 +5,66 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
-#include "Database.h" // Подключаем твой класс БД
+#include "Database.h" 
+#include "AuthProtocol.h" // Обязательно подключаем протокол
 
 #pragma comment(lib, "ws2_32.lib")
 
 std::vector<SOCKET> clients;
 std::mutex clients_mutex;
-Database db; // Глобальный объект базы данных
-
-void Broadcast(const std::string& message, SOCKET sender_socket) {
-    std::lock_guard<std::mutex> lock(clients_mutex);
-    for (auto it = clients.begin(); it != clients.end(); ) {
-        int res = send(*it, message.c_str(), (int)message.size() + 1, 0);
-        if (res == SOCKET_ERROR) {
-            closesocket(*it);
-            it = clients.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
+Database db; 
 
 void HandleClient(SOCKET client_socket) {
-    char buffer[4096];
+    char buffer[sizeof(AuthPacket) + 100]; // Запас под размер пакета
+    
     while (true) {
-        ZeroMemory(buffer, 4096);
-        int bytesReceived = recv(client_socket, buffer, 4096, 0);
+        ZeroMemory(buffer, sizeof(buffer));
+        int bytesReceived = recv(client_socket, buffer, sizeof(buffer), 0);
 
         if (bytesReceived <= 0) {
             std::cout << "[!] Клиент отключился." << std::endl;
             break;
         }
 
-        std::string msg(buffer);
-        std::cout << "[LOG] Получено: " << msg << std::endl;
+        // 1. Проверяем, является ли входящий пакет структурой авторизации
+        AuthPacket* packet = (AuthPacket*)buffer;
 
-        if (msg.find("AUTH:") == 0) {
-             std::cout << "[AUTH] Попытка входа..." << std::endl;
+        if (packet->type == PACKET_LOGIN || packet->type == PACKET_REGISTER) {
+            ResponsePacket res = { PACKET_AUTH_RESPONSE, false, "" };
+
+            if (packet->type == PACKET_REGISTER) {
+                std::cout << "[REG] Запрос от: " << packet->username << std::endl;
+                if (db.RegisterUser(packet->username, packet->email, packet->password)) {
+                    res.success = true;
+                    strcpy(res.message, "Account created successfully!");
+                } else {
+                    strcpy(res.message, "User already exists or DB error.");
+                }
+            } 
+            else if (packet->type == PACKET_LOGIN) {
+                std::cout << "[AUTH] Вход: " << packet->username << std::endl;
+                if (db.AuthenticateUser(packet->username, packet->password)) {
+                    res.success = true;
+                    strcpy(res.message, "Welcome to AEGIS.");
+                } else {
+                    strcpy(res.message, "Invalid username or password.");
+                }
+            }
+
+            // Отправляем ответ клиенту
+            send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
         } 
-        else if (msg.find("REG:") == 0) {
-             std::cout << "[REG] Регистрация нового юзера..." << std::endl;
-        }
         else {
-            Broadcast(msg, client_socket);
+            // Если это не пакет авторизации, считаем это обычным сообщением чата (для Broadcast)
+            std::string msg(buffer);
+            std::cout << "[CHAT] " << msg << std::endl;
+            
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            for (SOCKET s : clients) {
+                if (s != client_socket) {
+                    send(s, buffer, bytesReceived, 0);
+                }
+            }
         }
     }
 
@@ -55,7 +72,6 @@ void HandleClient(SOCKET client_socket) {
     clients.erase(std::remove(clients.begin(), clients.end(), client_socket), clients.end());
     closesocket(client_socket);
 }
-
 int main() {
     SetConsoleCP(65001);
     SetConsoleOutputCP(65001);

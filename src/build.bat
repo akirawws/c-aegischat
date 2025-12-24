@@ -1,6 +1,9 @@
 @echo off
 echo Building AEGIS Client...
 
+:: Укажи правильный путь к установленной Postgres
+set PG_PATH=C:\Program Files\PostgreSQL\18
+
 g++ -o Aegis.exe ^
     client_gui.cpp ^
     Utils/Styles.cpp ^
@@ -10,16 +13,17 @@ g++ -o Aegis.exe ^
     Components/MessageInput.cpp ^
     Components/Sidebar.cpp ^
     Components/MessageList.cpp ^
-    Pages/ConnectPage.cpp ^
+    Pages/AuthPage.cpp ^
     Pages/MainPage.cpp ^
     Pages/FriendsPage.cpp ^
-    -I"C:/Program Files/PostgreSQL/16/include" ^
-    -L"C:/Program Files/PostgreSQL/16/lib" ^
+    -I"%PG_PATH%\include" ^
     -I. ^
+    "%PG_PATH%\bin\libpq.dll" ^
     -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -mwindows -std=c++17
 
 if %ERRORLEVEL% == 0 (
-    echo Build successful! Output: Aegis.exe
+    echo Build successful!
+    copy "%PG_PATH%\bin\libpq.dll" . /Y >nul
 ) else (
     echo Build failed!
     pause

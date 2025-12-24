@@ -23,7 +23,7 @@
 #include "Components/Sidebar.h"
 #include "Components/MessageList.h"
 #include "Components/MessageInput.h"
-#include "Pages/ConnectPage.h"
+#include "Pages/AuthPage.h"
 #include "Pages/MainPage.h"
 
 void RegisterWindowClass(const char* className, WNDPROC proc) {
@@ -48,7 +48,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     LoadLibraryA("Msftedit.dll");
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return 1;
 
-    RegisterWindowClass("ConnectWindow", ConnectWndProc);
+    RegisterWindowClass("AuthWindow", AuthWndProc);
     RegisterWindowClass("MainWindow", MainWndProc);
     RegisterWindowClass("SidebarWindow", SidebarWndProc);
     RegisterWindowClass("MessageListWindow", MessageListWndProc);
@@ -58,16 +58,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int screenX = (GetSystemMetrics(SM_CXSCREEN) - connWidth) / 2;
     int screenY = (GetSystemMetrics(SM_CYSCREEN) - connHeight) / 2;
 
-    CreateConnectPage(hInstance, screenX, screenY, connWidth, connHeight);
+    CreateAuthPage(hInstance, screenX, screenY, connWidth, connHeight);
     CreateMainPage(hInstance, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600);
     
-    if (!hConnectWnd) {
-        WriteLog("Critical Error: hConnectWnd is NULL. LastError: " + std::to_string(GetLastError()));
+    if (!hAuthWnd) {
+        WriteLog("Critical Error: hAuthWnd is NULL. LastError: " + std::to_string(GetLastError()));
         return 0;
     }
 
-    ShowWindow(hConnectWnd, nCmdShow);
-    UpdateWindow(hConnectWnd);
+    ShowWindow(hAuthWnd, nCmdShow);
+    UpdateWindow(hAuthWnd);
     
     ProcessMessageLoop();
     WSACleanup();

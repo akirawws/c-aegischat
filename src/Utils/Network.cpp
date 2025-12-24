@@ -44,7 +44,6 @@ bool ConnectToServer(const std::string& address, const std::string& port) {
 
     freeaddrinfo(result);
     isConnected = true;
-    receiveThread = std::thread(ReceiveMessages);
     return true;
 }
 
@@ -63,6 +62,14 @@ void SendChatMessage() {
         if (send(clientSocket, fullMsg.c_str(), (int)fullMsg.length(), 0) != SOCKET_ERROR) {
             SetWindowTextW(hInputEdit, L"");
             UpdateInputHeight(GetParent(hInputEdit), hInputEdit, hMessageList);
+        }
+    }
+}
+
+void StartMessageSystem() {
+    if (isConnected && clientSocket != INVALID_SOCKET) {
+        if (!receiveThread.joinable()) {
+            receiveThread = std::thread(ReceiveMessages);
         }
     }
 }
@@ -124,6 +131,34 @@ void ParseMessage(const std::string& msg) {
         SetScrollInfo(hMessageList, SB_VERT, &si, TRUE);
         scrollPos = totalHeight - rect.bottom + 20;
     }
+}
+
+bool SendPacket(const char* data, int size) {
+    if (clientSocket == INVALID_SOCKET || !isConnected) {
+        return false;
+    }
+
+    int totalSent = 0;
+    while (totalSent < size) {
+        int sent = send(clientSocket, data + totalSent, size - totalSent, 0);
+        if (sent <= 0) return false;
+        totalSent += sent;
+    }
+    return true;
+}
+
+bool ReceivePacket(char* data, int size) {
+    if (clientSocket == INVALID_SOCKET || !isConnected) {
+        return false;
+    }
+
+    int totalReceived = 0;
+    while (totalReceived < size) {
+        int received = recv(clientSocket, data + totalReceived, size - totalReceived, 0);
+        if (received <= 0) return false;
+        totalReceived += received;
+    }
+    return true;
 }
 
 void ReceiveMessages() {

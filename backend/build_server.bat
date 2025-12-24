@@ -1,40 +1,38 @@
 @echo off
 chcp 65001 >nul
 
-:: УКАЖИ ЗДЕСЬ ПУТЬ К НОВОМУ КОМПИЛЯТОРУ
-set GCC_PATH=C:\mingw64\bin
+:: Убедись, что путь к НОВОМУ GCC верный
+set GCC_PATH=C:\TDM-GCC-64\bin
 set PG_PATH=C:\Program Files\PostgreSQL\18
 
-:: Добавляем новый GCC в начало поиска, чтобы TDM не мешал
 set PATH=%GCC_PATH%;%PATH%
 
-echo [STEP 1] Очистка старых файлов...
+echo [1/3] Очистка...
 del /f /q *.o server.exe *.dll
 
-echo [STEP 2] Компиляция (WinLibs 64-bit)...
-g++ -c Database.cpp -o Database.o -I"%PG_PATH%\include"
-g++ -c server.cpp -o server.o -I"%PG_PATH%\include"
+echo [2/3] Компиляция...
+g++ -m64 -c server.cpp -I"%PG_PATH%\include"
+g++ -m64 -c Database.cpp -I"%PG_PATH%\include"
 
-echo [STEP 3] Линковка...
-:: Убираем проблемный флаг --large-address-aware, здесь он не нужен
-g++ -o server.exe server.o Database.o "%PG_PATH%\lib\libpq.lib" ^
-    -static-libgcc -static-libstdc++ ^
-    -lws2_32 -lsecur32 -lshell32 -ladvapi32 -lcrypt32
-
+echo [3/3] Линковка (Динамическая через DLL)...
+:: Мы убираем -L и -lpq, и вместо этого передаем путь к самой DLL как объектный файл
+g++ -m64 server.o Database.o -o server.exe ^
+    "%PG_PATH%\bin\libpq.dll" ^
+    -lws2_32 -lsecur32 -ladvapi32 -lshell32 -luser32 -lgdi32
+    
 if %ERRORLEVEL% EQU 0 (
-    echo [STEP 4] Копирование библиотек...
+    echo [OK] Собрано! Копируем DLL...
     copy "%PG_PATH%\bin\libpq.dll" . /Y >nul
     copy "%PG_PATH%\bin\libcrypto-3-x64.dll" . /Y >nul
     copy "%PG_PATH%\bin\libssl-3-x64.dll" . /Y >nul
     copy "%PG_PATH%\bin\libintl-9.dll" . /Y >nul
     copy "%PG_PATH%\bin\libiconv-2.dll" . /Y >nul
     
-    echo --------------------------------------------------
-    echo [ПРОВЕРКА] Если сейчас покажет False - МЫ ПОБЕДИЛИ!
-    powershell -NoProfile -Command "cat server.exe -Raw | Select-String -CaseSensitive 'PE..L' -Quiet"
-    echo --------------------------------------------------
-    echo Запускай server.exe!
+    echo ---------------------------------------
+    echo ВСЁ ГОТОВО!
+    echo Теперь точно запускай: server.exe
+    echo ---------------------------------------
 ) else (
-    echo [!] Ошибка сборки. Посмотри текст выше.
+    echo [!] Ошибка линковки всё еще есть.
 )
 pause

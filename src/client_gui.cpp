@@ -28,7 +28,7 @@
 #define COLOR_ACCENT_BLUE_DARK RGB(50, 100, 160)
 #define COLOR_MESSAGE_OTHER RGB(35, 45, 60)
 #define COLOR_MESSAGE_USER RGB(50, 90, 140)
-
+int scrollPos = 0;
 // Структура сообщения
 struct Message {
     std::string text;
@@ -72,9 +72,29 @@ std::string GetCurrentTimeStr() {
     sprintf(buf, "%02d:%02d", st.wHour, st.wMinute);
     return std::string(buf);
 }
-
 // Вычисление высоты сообщения (объявление перед использованием)
-int GetMessageHeight(const Message& msg, int width);
+int GetMessageHeight(const Message& msg, int width) {
+    HDC hdc = GetDC(hMessageList);
+    int msgWidth = (int)(width * 0.65);
+    RECT textRect = { 0, 0, msgWidth - 24, 0 };
+    
+    HFONT hFont = CreateFontA(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+    
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    
+    // Расчет размеров текста
+    DrawTextA(hdc, msg.text.c_str(), -1, &textRect, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_CALCRECT);
+    
+    SelectObject(hdc, hOldFont);
+    DeleteObject(hFont);
+    ReleaseDC(hMessageList, hdc);
+
+    // Явное приведение обоих аргументов к int
+    return std::max((int)60, (int)(textRect.bottom + 40));
+}
+
 
 void WriteLog(const std::string& text) {
     // Используем полный путь, чтобы файл создавался рядом с EXE
@@ -92,6 +112,7 @@ void WriteLog(const std::string& text) {
         fclose(f);
     }
 }
+
 // Парсинг сообщения от сервера
 void ParseMessage(const std::string& msg) {
     Message m;
@@ -150,6 +171,7 @@ void ParseMessage(const std::string& msg) {
     for (const auto& msg : messages) {
         totalHeight += GetMessageHeight(msg, rect.right) + 10;
     }
+    
     if (totalHeight > rect.bottom) {
         SCROLLINFO si = {};
         si.cbSize = sizeof(SCROLLINFO);
@@ -159,6 +181,7 @@ void ParseMessage(const std::string& msg) {
         si.nPage = rect.bottom;
         si.nPos = totalHeight - rect.bottom;
         SetScrollInfo(hMessageList, SB_VERT, &si, TRUE);
+        scrollPos = totalHeight - rect.bottom + 20;
     }
 }
 
@@ -186,21 +209,6 @@ void ReceiveMessages() {
     isConnected = false;
 }
 
-// Вычисление высоты сообщения
-int GetMessageHeight(const Message& msg, int width) {
-    HDC hdc = GetDC(hMessageList);
-    int msgWidth = (int)(width * 0.65);
-    RECT textRect = { 0, 0, msgWidth - 24, 0 };
-    HFONT hFont = CreateFontA(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-    DrawTextA(hdc, msg.text.c_str(), -1, &textRect, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_CALCRECT);
-    SelectObject(hdc, hOldFont);
-    DeleteObject(hFont);
-    ReleaseDC(hMessageList, hdc);
-    return std::max(60, (int)(textRect.bottom + 40));
-}
 
 void DrawMessage(HDC hdc, const Message& msg, int y, int width) {
     // 1. Подготовка текста (конвертация UTF-8 -> UTF-16 для вывода)
@@ -231,7 +239,7 @@ void DrawMessage(HDC hdc, const Message& msg, int y, int width) {
     DrawTextW(hdcMeasure, wText.c_str(), -1, &calcRect, DT_CALCRECT | DT_WORDBREAK);
     DeleteDC(hdcMeasure);
 
-    int finalBubbleWidth = std::max(140, (int)calcRect.right + 30); // Увеличил min width для ника+времени
+    int finalBubbleWidth = std::max((int)140, (int)calcRect.right + 30);
     int finalHeight = calcRect.bottom + 45; 
     
     int x = msg.isUser ? (width - finalBubbleWidth - 25) : 25;
@@ -626,30 +634,60 @@ LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 }
 
 LRESULT CALLBACK MessageListWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_PAINT) {
+    switch (uMsg) {
+    case WM_MOUSEWHEEL: {
+        int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+        scrollPos -= (zDelta / 2); // Регулируйте делитель для скорости (2-4 обычно ок)
+        if (scrollPos < 0) scrollPos = 0;
+        
+        // Ограничение скролла снизу (чтобы не улетать в пустоту)
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        int totalHeight = 20;
+        for (const auto& m : messages) totalHeight += GetMessageHeight(m, rect.right) + 10;
+        int maxScroll = std::max((int)0, (int)(totalHeight - rect.bottom + 50));
+        if (scrollPos > maxScroll) scrollPos = maxScroll;
+
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+    }
+    case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        
         RECT rect;
         GetClientRect(hwnd, &rect);
 
+        // Двойная буферизация для отсутствия мерцания
         HDC memDC = CreateCompatibleDC(hdc);
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
         SelectObject(memDC, memBitmap);
 
-        OnPaintMessageList(memDC, rect.right, rect.bottom);
+        // Рисуем фон
+        HBRUSH brush = CreateSolidBrush(COLOR_BG_DARK);
+        FillRect(memDC, &rect, brush);
+        DeleteObject(brush);
+
+        // Отрисовка сообщений с учетом scrollPos
+        int y = 20 - scrollPos; 
+        for (const auto& msg : messages) {
+            int h = GetMessageHeight(msg, rect.right);
+            // Рисуем только те, что видны на экране (оптимизация)
+            if (y + h > 0 && y < rect.bottom) {
+                DrawMessage(memDC, msg, y, rect.right);
+            }
+            y += h + 10;
+        }
 
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
-
         DeleteObject(memBitmap);
         DeleteDC(memDC);
         EndPaint(hwnd, &ps);
         return 0;
     }
-    if (uMsg == WM_ERASEBKGND) return 1; 
+    case WM_ERASEBKGND: return 1;
+    }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
-
 // Регистрация класса окна
 void RegisterWindowClass(const char* className, WNDPROC proc) {
     WriteLog("Registering class: " + std::string(className));

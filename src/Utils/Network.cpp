@@ -10,6 +10,7 @@ SOCKET clientSocket = INVALID_SOCKET;
 bool isConnected = false;
 std::thread receiveThread;
 std::string userName = "User"; 
+std::string currentUserName = "";
 std::string userAvatar = "[^.^]";
 
 bool ConnectToServer(const std::string& address, const std::string& port) {

@@ -288,3 +288,61 @@
 [23:24:33] Registering class: MessageListWindow
 [23:24:33] Class MessageListWindow registered successfully.
 [23:24:47] User logged in: aboba
+[23:32:15] --- APP START ---
+[23:32:15] Registering class: AuthWindow
+[23:32:15] Class AuthWindow registered successfully.
+[23:32:15] Registering class: MainWindow
+[23:32:15] Class MainWindow registered successfully.
+[23:32:15] Registering class: SidebarWindow
+[23:32:15] Class SidebarWindow registered successfully.
+[23:32:15] Registering class: MessageListWindow
+[23:32:15] Class MessageListWindow registered successfully.
+[23:44:08] --- APP START ---
+[23:44:08] Registering class: AuthWindow
+[23:44:08] Class AuthWindow registered successfully.
+[23:44:08] Registering class: MainWindow
+[23:44:08] Class MainWindow registered successfully.
+[23:44:08] Registering class: SidebarWindow
+[23:44:08] Class SidebarWindow registered successfully.
+[23:44:08] Registering class: MessageListWindow
+[23:44:08] Class MessageListWindow registered successfully.
+[23:44:28] User logged in: Akira Developer
+[23:44:43] --- APP START ---
+[23:44:43] Registering class: AuthWindow
+[23:44:43] Class AuthWindow registered successfully.
+[23:44:43] Registering class: MainWindow
+[23:44:43] Class MainWindow registered successfully.
+[23:44:43] Registering class: SidebarWindow
+[23:44:43] Class SidebarWindow registered successfully.
+[23:44:43] Registering class: MessageListWindow
+[23:44:43] Class MessageListWindow registered successfully.
+[23:44:57] User logged in: Test
+[23:50:33] --- APP START ---
+[23:50:33] Registering class: AuthWindow
+[23:50:33] Class AuthWindow registered successfully.
+[23:50:33] Registering class: MainWindow
+[23:50:33] Class MainWindow registered successfully.
+[23:50:33] Registering class: SidebarWindow
+[23:50:33] Class SidebarWindow registered successfully.
+[23:50:33] Registering class: MessageListWindow
+[23:50:33] Class MessageListWindow registered successfully.
+[23:51:18] User logged in: akira
+[23:59:57] --- APP START ---
+[23:59:57] Registering class: AuthWindow
+[23:59:57] Class AuthWindow registered successfully.
+[23:59:57] Registering class: MainWindow
+[23:59:57] Class MainWindow registered successfully.
+[23:59:57] Registering class: SidebarWindow
+[23:59:57] Class SidebarWindow registered successfully.
+[23:59:57] Registering class: MessageListWindow
+[23:59:57] Class MessageListWindow registered successfully.
+[00:10:07] --- APP START ---
+[00:10:07] Registering class: AuthWindow
+[00:10:07] Class AuthWindow registered successfully.
+[00:10:07] Registering class: MainWindow
+[00:10:07] Class MainWindow registered successfully.
+[00:10:07] Registering class: SidebarWindow
+[00:10:07] Class SidebarWindow registered successfully.
+[00:10:07] Registering class: MessageListWindow
+[00:10:07] Class MessageListWindow registered successfully.
+[00:10:40] User logged in: akira1

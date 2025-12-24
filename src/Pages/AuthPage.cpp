@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 
+
 // Состояния страницы
 enum AuthState { STATE_LOGIN, STATE_REGISTER };
 AuthState currentAuthState = STATE_LOGIN;
@@ -22,7 +23,6 @@ HWND hActionBtn = NULL;
 HWND hSwitchBtn = NULL;    
 
 extern HWND hMainWnd;
-extern std::string userName; // Глобальная переменная для хранения имени вошедшего пользователя
 
 // Вспомогательная функция для переключения видимости
 void ToggleAuthMode(HWND hwnd) {

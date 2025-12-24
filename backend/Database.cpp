@@ -114,3 +114,28 @@ bool Database::AuthenticateUser(const std::string& login, const std::string& pas
     PQclear(res);
     return authenticated;
 }
+bool Database::AddFriendRequest(const std::string& sender, const std::string& target) {
+    if (sender.empty() || target.empty() || sender == target) return false;
+
+    // ВАЖНО: SQL запрос должен соответствовать вашей структуре таблиц
+    std::string query = 
+        "INSERT INTO friendships (user_id_1, user_id_2, status, action_user_id) "
+        "SELECT u1.id, u2.id, 'pending', u1.id "
+        "FROM users u1, users u2 "
+        "WHERE u1.username = '" + sender + "' AND u2.username = '" + target + "' "
+        "ON CONFLICT DO NOTHING;";
+
+    // Здесь используйте ваш метод выполнения запроса (например, PQexec для libpq)
+    PGresult* res = PQexec(conn, query.c_str()); 
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "Ошибка БД: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return false;
+    }
+
+    // Проверяем, была ли вставлена строка (atoi(PQcmdTuples(res)) > 0)
+    bool success = true; 
+    PQclear(res);
+    return success;
+}

@@ -13,6 +13,7 @@ extern SOCKET clientSocket;
 extern bool isConnected;
 extern std::thread receiveThread;
 extern std::string userName;
+extern std::string currentUserName;
 extern std::string userAvatar;
 
 bool ConnectToServer(const std::string& address, const std::string& port);

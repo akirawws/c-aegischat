@@ -6,7 +6,7 @@
 #include <mutex>
 #include <algorithm>
 #include "Database.h" 
-#include "AuthProtocol.h" // Обязательно подключаем протокол
+#include "AuthProtocol.h" 
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -15,7 +15,8 @@ std::mutex clients_mutex;
 Database db; 
 
 void HandleClient(SOCKET client_socket) {
-    char buffer[sizeof(AuthPacket) + 100]; // Запас под размер пакета
+    // Используем размер самого большого пакета + запас
+    char buffer[512]; 
     
     while (true) {
         ZeroMemory(buffer, sizeof(buffer));
@@ -26,10 +27,11 @@ void HandleClient(SOCKET client_socket) {
             break;
         }
 
-        // 1. Проверяем, является ли входящий пакет структурой авторизации
-        AuthPacket* packet = (AuthPacket*)buffer;
+        // Все пакеты начинаются с поля type (uint8_t)
+        uint8_t packetType = *(uint8_t*)buffer;
 
-        if (packet->type == PACKET_LOGIN || packet->type == PACKET_REGISTER) {
+        if (packetType == PACKET_LOGIN || packetType == PACKET_REGISTER) {
+            AuthPacket* packet = (AuthPacket*)buffer;
             ResponsePacket res = { PACKET_AUTH_RESPONSE, false, "" };
 
             if (packet->type == PACKET_REGISTER) {
@@ -50,15 +52,23 @@ void HandleClient(SOCKET client_socket) {
                     strcpy(res.message, "Invalid username or password.");
                 }
             }
-
-            // Отправляем ответ клиенту
             send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
         } 
+        else if (packetType == PACKET_FRIEND_REQUEST) {
+            FriendPacket* fPkt = (FriendPacket*)buffer;
+            std::cout << "[FRIEND] Запрос: " << fPkt->senderUsername << " -> " << fPkt->targetUsername << std::endl;
+
+            // Логика БД: вернет true, если запись вставлена
+            if (db.AddFriendRequest(fPkt->senderUsername, fPkt->targetUsername)) {
+                std::cout << "[SUCCESS] Заявка сохранена в БД." << std::endl;
+            } else {
+                std::cerr << "[ERROR] Ошибка БД (юзер не найден или уже в друзьях)." << std::endl;
+            }
+            // Здесь можно отправить ResponsePacket отправителю, чтобы клиент вывел "Запрос отправлен"
+        }
         else {
-            // Если это не пакет авторизации, считаем это обычным сообщением чата (для Broadcast)
-            std::string msg(buffer);
-            std::cout << "[CHAT] " << msg << std::endl;
-            
+            // Обычный чат / Broadcast
+            std::cout << "[CHAT] Сообщение получено." << std::endl;
             std::lock_guard<std::mutex> lock(clients_mutex);
             for (SOCKET s : clients) {
                 if (s != client_socket) {
@@ -69,15 +79,17 @@ void HandleClient(SOCKET client_socket) {
     }
 
     std::lock_guard<std::mutex> lock(clients_mutex);
-    clients.erase(std::remove(clients.begin(), clients.end(), client_socket), clients.end());
+    auto it = std::find(clients.begin(), clients.end(), client_socket);
+    if (it != clients.end()) clients.erase(it);
     closesocket(client_socket);
 }
+
 int main() {
     SetConsoleCP(65001);
     SetConsoleOutputCP(65001);
 
     if (!db.Connect()) {
-        std::cerr << "[CRITICAL] Не удалось подключиться к БД! Проверьте .env" << std::endl;
+        std::cerr << "[CRITICAL] Не удалось подключиться к БД!" << std::endl;
         return 1; 
     }
 
@@ -104,6 +116,7 @@ int main() {
         std::thread(HandleClient, clientSocket).detach();
     }
 
+    closesocket(serverSocket);
     WSACleanup();
     return 0;
 }

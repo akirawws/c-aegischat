@@ -7,6 +7,7 @@
 #include "Utils/Keyboard.h"
 #include "Utils/Network.h"
 #include <vector>
+#include <string>
 
 HWND hMainWnd = NULL;
 extern int inputEditHeight;
@@ -53,17 +54,21 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
 
-    case WM_LBUTTONDOWN: {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        
-        if (currentState == AppState::Friends) {
-            HandleFriendsClick(hwnd, x, y); // Обработка кликов по кнопкам фильтрации и "Добавить"
-        } else {
-            SetFocus(hInputEdit);
+        case WM_LBUTTONDOWN: {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            
+            if (currentState == AppState::Friends) {
+                // Получаем экземпляр приложения для передачи в функцию
+                HINSTANCE hInst = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+                
+                // Теперь передаем 4 аргумента, как того требует реализация в FriendsPage.cpp
+                HandleFriendsClick(hwnd, x, y, hInst); 
+            } else {
+                SetFocus(hInputEdit);
+            }
+            break;
         }
-        break;
-    }
 
     case WM_PAINT: {
         PAINTSTRUCT ps;

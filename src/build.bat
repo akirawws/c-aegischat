@@ -1,7 +1,6 @@
 @echo off
 echo Building AEGIS Client...
 
-:: Укажи правильный путь к установленной Postgres
 set PG_PATH=C:\Program Files\PostgreSQL\18
 
 g++ -o Aegis.exe ^
@@ -11,6 +10,7 @@ g++ -o Aegis.exe ^
     Utils/Network.cpp ^
     Utils/Keyboard.cpp ^
     Utils/HashPassword.cpp ^
+    Utils/FriendsUtils.cpp ^
     Components/MessageInput.cpp ^
     Components/Sidebar.cpp ^
     Components/MessageList.cpp ^

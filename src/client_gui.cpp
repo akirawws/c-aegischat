@@ -17,24 +17,39 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "comctl32.lib")
 
-// Цвета темы
-#define COLOR_BG_DARK RGB(18, 18, 24)
-#define COLOR_BG_SIDEBAR RGB(25, 25, 35)
-#define COLOR_BG_BLUE RGB(30, 50, 80)
-#define COLOR_BG_BLUE_HOVER RGB(40, 65, 100)
-#define COLOR_TEXT_WHITE RGB(240, 240, 245)
-#define COLOR_TEXT_GRAY RGB(180, 180, 190)
-#define COLOR_ACCENT_BLUE RGB(70, 130, 200)
-#define COLOR_ACCENT_BLUE_DARK RGB(50, 100, 160)
-#define COLOR_MESSAGE_OTHER RGB(35, 45, 60)
-#define COLOR_MESSAGE_USER RGB(50, 90, 140)
+// Цвета темы (современная темная палитра)
+#define COLOR_BG_DARK RGB(16, 16, 20)
+#define COLOR_BG_SIDEBAR RGB(22, 22, 28)
+#define COLOR_BG_BLUE RGB(35, 55, 85)
+#define COLOR_BG_BLUE_HOVER RGB(45, 70, 110)
+#define COLOR_TEXT_WHITE RGB(245, 245, 250)
+#define COLOR_TEXT_GRAY RGB(170, 170, 180)
+#define COLOR_TEXT_LIGHT_GRAY RGB(200, 200, 210)
+#define COLOR_ACCENT_BLUE RGB(80, 140, 220)
+#define COLOR_ACCENT_BLUE_DARK RGB(60, 110, 180)
+#define COLOR_ACCENT_BLUE_LIGHT RGB(100, 160, 240)
+#define COLOR_MESSAGE_OTHER RGB(30, 38, 50)
+#define COLOR_MESSAGE_USER RGB(55, 95, 150)
+#define COLOR_INPUT_BG RGB(28, 28, 34)
+#define COLOR_INPUT_BORDER RGB(45, 45, 55)
+#define COLOR_BUTTON_HOVER RGB(90, 150, 230)
+#define FONT_FAMILY "Segoe UI"
+#define FONT_SIZE_LARGE 24
+#define FONT_SIZE_MEDIUM 16
+#define FONT_SIZE_NORMAL 14
+#define FONT_SIZE_SMALL 12
+#define FONT_WEIGHT_NORMAL FW_NORMAL
+#define FONT_WEIGHT_SEMIBOLD FW_SEMIBOLD
+#define FONT_WEIGHT_BOLD FW_BOLD
 int scrollPos = 0;
-// Структура сообщения
+
+
+
 struct Message {
     std::string text;
     bool isUser;
     std::string sender;
-    std::string timeStr; // Новое поле
+    std::string timeStr;
 };
 
 // Глобальные переменные
@@ -72,16 +87,20 @@ std::string GetCurrentTimeStr() {
     sprintf(buf, "%02d:%02d", st.wHour, st.wMinute);
     return std::string(buf);
 }
+// Функция создания единого шрифта
+HFONT CreateAppFont(int size, int weight = FONT_WEIGHT_NORMAL) {
+    return CreateFontA(size, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, FONT_FAMILY);
+}
+
 // Вычисление высоты сообщения (объявление перед использованием)
 int GetMessageHeight(const Message& msg, int width) {
     HDC hdc = GetDC(hMessageList);
-    int msgWidth = (int)(width * 0.65);
-    RECT textRect = { 0, 0, msgWidth - 24, 0 };
+    int msgWidth = (int)(width * 0.70);
+    RECT textRect = { 0, 0, msgWidth - 32, 0 };
     
-    HFONT hFont = CreateFontA(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-    
+    HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL);
     HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
     
     // Расчет размеров текста
@@ -91,8 +110,7 @@ int GetMessageHeight(const Message& msg, int width) {
     DeleteObject(hFont);
     ReleaseDC(hMessageList, hdc);
 
-    // Явное приведение обоих аргументов к int
-    return std::max((int)60, (int)(textRect.bottom + 40));
+    return std::max((int)70, (int)(textRect.bottom + 50));
 }
 
 
@@ -220,69 +238,77 @@ void DrawMessage(HDC hdc, const Message& msg, int y, int width) {
     std::wstring wSender(sLen, 0);
     MultiByteToWideChar(CP_UTF8, 0, msg.sender.c_str(), -1, &wSender[0], sLen);
 
-    // Подготовка времени (Unicode)
     int tLen = MultiByteToWideChar(CP_UTF8, 0, msg.timeStr.c_str(), -1, NULL, 0);
     std::wstring wTime(tLen, 0);
     MultiByteToWideChar(CP_UTF8, 0, msg.timeStr.c_str(), -1, &wTime[0], tLen);
 
     // 2. Расчет размеров бабла
-    int maxBubbleWidth = (int)(width * 0.75);
+    int maxBubbleWidth = (int)(width * 0.70);
     
-    HFONT hFontMsg = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
-                                 RUSSIAN_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
+    HFONT hFontMsg = CreateFontW(FONT_SIZE_NORMAL, 0, 0, 0, FONT_WEIGHT_NORMAL, FALSE, FALSE, FALSE, 
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     
     HDC hdcMeasure = CreateCompatibleDC(hdc);
     SelectObject(hdcMeasure, hFontMsg);
     
-    RECT calcRect = { 0, 0, maxBubbleWidth - 30, 0 };
+    RECT calcRect = { 0, 0, maxBubbleWidth - 36, 0 };
     DrawTextW(hdcMeasure, wText.c_str(), -1, &calcRect, DT_CALCRECT | DT_WORDBREAK);
     DeleteDC(hdcMeasure);
 
-    int finalBubbleWidth = std::max((int)140, (int)calcRect.right + 30);
-    int finalHeight = calcRect.bottom + 45; 
+    int finalBubbleWidth = std::max((int)160, (int)calcRect.right + 36);
+    int finalHeight = calcRect.bottom + 52; 
     
-    int x = msg.isUser ? (width - finalBubbleWidth - 25) : 25;
+    int x = msg.isUser ? (width - finalBubbleWidth - 20) : 20;
 
-    // 3. Отрисовка "Бабла"
-    SelectObject(hdc, GetStockObject(NULL_PEN));
+    // 3. Отрисовка "Бабла" с тенью
+    // Тень
+    HBRUSH shadowBrush = CreateSolidBrush(RGB(0, 0, 0));
+    RECT shadowRect = { x + 2, y + 2, x + finalBubbleWidth + 2, y + finalHeight + 2 };
+    FillRect(hdc, &shadowRect, shadowBrush);
+    DeleteObject(shadowBrush);
+    
+    // Основной бабл
+    HPEN borderPen = CreatePen(PS_SOLID, 1, msg.isUser ? COLOR_ACCENT_BLUE : COLOR_INPUT_BORDER);
+    HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
     HBRUSH bubbleBrush = CreateSolidBrush(msg.isUser ? COLOR_MESSAGE_USER : COLOR_MESSAGE_OTHER);
     HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, bubbleBrush);
     
-    RoundRect(hdc, x, y, x + finalBubbleWidth, y + finalHeight, 15, 15);
+    RoundRect(hdc, x, y, x + finalBubbleWidth, y + finalHeight, 18, 18);
+    
+    SelectObject(hdc, oldPen);
+    DeleteObject(borderPen);
 
     // 4. Отрисовка ника и времени
     SetBkMode(hdc, TRANSPARENT);
     
     // Шрифт ника
-    HFONT hFontName = CreateFontW(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, 
-                                  RUSSIAN_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
+    HFONT hFontName = CreateFontW(FONT_SIZE_SMALL, 0, 0, 0, FONT_WEIGHT_SEMIBOLD, FALSE, FALSE, FALSE, 
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SelectObject(hdc, hFontName);
-    SetTextColor(hdc, msg.isUser ? RGB(160, 200, 255) : COLOR_ACCENT_BLUE);
+    SetTextColor(hdc, msg.isUser ? COLOR_ACCENT_BLUE_LIGHT : COLOR_ACCENT_BLUE);
     
     // Рисуем ник
-    TextOutW(hdc, x + 15, y + 8, wSender.c_str(), (int)wcslen(wSender.c_str()));
+    TextOutW(hdc, x + 18, y + 12, wSender.c_str(), (int)wcslen(wSender.c_str()));
 
-    // Измеряем ширину ника, чтобы поставить время рядом
     SIZE nameSize;
     GetTextExtentPoint32W(hdc, wSender.c_str(), (int)wcslen(wSender.c_str()), &nameSize);
 
-    // Шрифт времени (чуть меньше и серый)
-    HFONT hFontTime = CreateFontW(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
-                                  RUSSIAN_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
+    // Шрифт времени
+    HFONT hFontTime = CreateFontW(FONT_SIZE_SMALL - 1, 0, 0, 0, FONT_WEIGHT_NORMAL, FALSE, FALSE, FALSE, 
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SelectObject(hdc, hFontTime);
     SetTextColor(hdc, COLOR_TEXT_GRAY);
     
-    // Рисуем время справа от ника (+8 пикселей зазор)
-    TextOutW(hdc, x + 15 + nameSize.cx + 8, y + 10, wTime.c_str(), (int)wcslen(wTime.c_str()));
+    TextOutW(hdc, x + 18 + nameSize.cx + 10, y + 13, wTime.c_str(), (int)wcslen(wTime.c_str()));
 
     // 5. Сообщение
     SelectObject(hdc, hFontMsg);
     SetTextColor(hdc, COLOR_TEXT_WHITE);
-    RECT textRect = { x + 15, y + 28, x + finalBubbleWidth - 15, y + finalHeight - 10 };
-    DrawTextW(hdc, wText.c_str(), -1, &textRect, DT_LEFT | DT_WORDBREAK);
+    RECT textRect = { x + 18, y + 32, x + finalBubbleWidth - 18, y + finalHeight - 12 };
+    DrawTextW(hdc, wText.c_str(), -1, &textRect, DT_LEFT | DT_WORDBREAK | DT_TOP);
 
     // Чистим ресурсы
     SelectObject(hdc, oldBrush);
@@ -311,33 +337,49 @@ void OnPaintSidebar(HDC hdc, int width, int height) {
     RECT rect;
     GetClientRect(hSidebar, &rect);
     
+    // Фон
     HBRUSH brush = CreateSolidBrush(COLOR_BG_SIDEBAR);
     FillRect(hdc, &rect, brush);
     DeleteObject(brush);
     
+    // Заголовок
     SetTextColor(hdc, COLOR_TEXT_WHITE);
     SetBkMode(hdc, TRANSPARENT);
-    HFONT hFont = CreateFontA(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+    HFONT hFont = CreateAppFont(FONT_SIZE_MEDIUM, FONT_WEIGHT_BOLD);
     HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
     
-    RECT textRect = { 20, 20, width - 20, 50 };
+    RECT textRect = { 24, 24, width - 24, 56 };
     DrawTextA(hdc, "Chats", -1, &textRect, DT_LEFT | DT_VCENTER);
     
-    RECT chatRect = { 10, 60, width - 10, 100 };
+    // Разделительная линия
+    HPEN linePen = CreatePen(PS_SOLID, 1, COLOR_INPUT_BORDER);
+    HPEN oldPen = (HPEN)SelectObject(hdc, linePen);
+    MoveToEx(hdc, 16, 68, NULL);
+    LineTo(hdc, width - 16, 68);
+    SelectObject(hdc, oldPen);
+    DeleteObject(linePen);
+    
+    // Активный чат
+    RECT chatRect = { 12, 80, width - 12, 120 };
     brush = CreateSolidBrush(COLOR_BG_BLUE);
     FillRect(hdc, &chatRect, brush);
     DeleteObject(brush);
     
+    // Рамка активного чата
+    HPEN borderPen = CreatePen(PS_SOLID, 1, COLOR_ACCENT_BLUE);
+    SelectObject(hdc, borderPen);
+    SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    RoundRect(hdc, chatRect.left, chatRect.top, chatRect.right, chatRect.bottom, 8, 8);
+    SelectObject(hdc, oldPen);
+    DeleteObject(borderPen);
+    
+    // Текст чата
     SetTextColor(hdc, COLOR_TEXT_WHITE);
     SelectObject(hdc, hOldFont);
-    hFont = CreateFontA(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+    hFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_SEMIBOLD);
     SelectObject(hdc, hFont);
     
-    textRect = { 20, 70, width - 20, 90 };
+    textRect = { 24, 88, width - 24, 112 };
     DrawTextA(hdc, "General Chat", -1, &textRect, DT_LEFT | DT_VCENTER);
     
     DeleteObject(hFont);
@@ -409,29 +451,34 @@ void SendChatMessage() {
 
 LRESULT CALLBACK ConnectWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_CREATE: {
+case WM_CREATE: {
+    int fieldW = 300;
+    int fieldH = 30;
+    int startX = (420 - fieldW) / 2 - 10;
 
-        hIPEdit = CreateWindowA("EDIT", "xisyrurdm.localto.net",
-            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER,
-            50, 80, 300, 30, hwnd, NULL, NULL, NULL);
-        
-        hPortEdit = CreateWindowA("EDIT", "6162",
-            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER,
-            50, 130, 300, 30, hwnd, NULL, NULL, NULL);
-        
-        hNameEdit = CreateWindowA("EDIT", "",
-            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER,
-            50, 180, 300, 30, hwnd, NULL, NULL, NULL);
-        
-        hConnectBtn = CreateWindowA("BUTTON", "Connect",
-            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-            50, 240, 300, 40, hwnd, (HMENU)1, NULL, NULL);
-        
+    hIPEdit = CreateWindowA("EDIT", "xisyrurdm.localto.net",
+        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+        startX, 120, fieldW, fieldH, hwnd, NULL, NULL, NULL);
 
-        SendMessageA(hIPEdit, EM_SETCUEBANNER, TRUE, (LPARAM)"Server IP address");
-        SendMessageA(hPortEdit, EM_SETCUEBANNER, TRUE, (LPARAM)"Port");
-        SendMessageA(hNameEdit, EM_SETCUEBANNER, TRUE, (LPARAM)"Your name");
-        break;
+    hPortEdit = CreateWindowA("EDIT", "6162",
+        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+        startX, 185, fieldW, fieldH, hwnd, NULL, NULL, NULL);
+
+    hNameEdit = CreateWindowA("EDIT", "",
+        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+        startX, 250, fieldW, fieldH, hwnd, NULL, NULL, NULL);
+
+    hConnectBtn = CreateWindowA("BUTTON", "Connect",
+        WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
+        startX, 320, fieldW, 45, hwnd, (HMENU)1, NULL, NULL);
+    
+    // Стили и шрифты
+    HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL);
+    SendMessage(hIPEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessage(hPortEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessage(hNameEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessage(hConnectBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
+    break;
     }
 case WM_COMMAND:
         if (LOWORD(wParam) == 1) { // Кнопка Connect
@@ -477,33 +524,39 @@ case WM_COMMAND:
         FillRect(hdc, &rect, brush);
         DeleteObject(brush);
         
+        // Логотип/Заголовок
         SetTextColor(hdc, COLOR_TEXT_WHITE);
         SetBkMode(hdc, TRANSPARENT);
-        HFONT hFont = CreateFontA(28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+        HFONT hFont = CreateAppFont(FONT_SIZE_LARGE, FONT_WEIGHT_BOLD);
         HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
         
-        RECT textRect = { 0, 20, rect.right, 60 };
+        RECT textRect = { 0, 32, rect.right, 72 };
         DrawTextA(hdc, "AEGIS", -1, &textRect, DT_CENTER | DT_VCENTER);
         
+        // Подзаголовок
         SelectObject(hdc, hOldFont);
         DeleteObject(hFont);
-        
-
-        hFont = CreateFontA(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+        hFont = CreateAppFont(FONT_SIZE_SMALL, FONT_WEIGHT_NORMAL);
         SelectObject(hdc, hFont);
         SetTextColor(hdc, COLOR_TEXT_GRAY);
         
-        textRect = { 50, 55, 350, 80 };
+        textRect = { 0, 72, rect.right, 92 };
+        DrawTextA(hdc, "Secure Chat Connection", -1, &textRect, DT_CENTER | DT_VCENTER);
+        
+        // Метки полей
+        SelectObject(hdc, hOldFont);
+        DeleteObject(hFont);
+        hFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_NORMAL);
+        SelectObject(hdc, hFont);
+        SetTextColor(hdc, COLOR_TEXT_LIGHT_GRAY);
+        
+        textRect = { 50, 100, 350, 120 }; 
         DrawTextA(hdc, "Server IP address", -1, &textRect, DT_LEFT | DT_VCENTER);
-        
-        textRect = { 50, 105, 350, 130 };
+
+        textRect = { 50, 165, 350, 185 }; 
         DrawTextA(hdc, "Port", -1, &textRect, DT_LEFT | DT_VCENTER);
-        
-        textRect = { 50, 155, 350, 180 };
+
+        textRect = { 50, 230, 350, 250 }; 
         DrawTextA(hdc, "Your name", -1, &textRect, DT_LEFT | DT_VCENTER);
         
         DeleteObject(hFont);
@@ -512,15 +565,17 @@ case WM_COMMAND:
     }
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, RGB(30, 30, 40));
+        SetBkColor(hdc, COLOR_INPUT_BG);
         SetTextColor(hdc, COLOR_TEXT_WHITE);
-        return (LRESULT)CreateSolidBrush(RGB(30, 30, 40));
+        static HBRUSH hBrush = CreateSolidBrush(COLOR_INPUT_BG);
+        return (LRESULT)hBrush;
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
         SetBkColor(hdc, COLOR_ACCENT_BLUE);
         SetTextColor(hdc, COLOR_TEXT_WHITE);
-        return (LRESULT)CreateSolidBrush(COLOR_ACCENT_BLUE);
+        static HBRUSH hBrush = CreateSolidBrush(COLOR_ACCENT_BLUE);
+        return (LRESULT)hBrush;
     }
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -544,12 +599,19 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             250, 0, 750, 550, hwnd, NULL, NULL, NULL);
         
         hInputEdit = CreateWindowA("EDIT", "",
-            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL,
-            250, 550, 650, 50, hwnd, NULL, NULL, NULL);
+            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
+            250, 550, 650, 52, hwnd, NULL, NULL, NULL);
         
         hSendBtn = CreateWindowA("BUTTON", "Send",
-            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-            900, 550, 100, 50, hwnd, (HMENU)2, NULL, NULL);
+            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW,
+            900, 550, 100, 52, hwnd, (HMENU)2, NULL, NULL);
+        
+        // Установка единого шрифта
+        HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL);
+        SendMessage(hInputEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+        
+        HFONT hBtnFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_SEMIBOLD);
+        SendMessage(hSendBtn, WM_SETFONT, (WPARAM)hBtnFont, TRUE);
         break;
     }
     case WM_COMMAND:
@@ -581,15 +643,46 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, RGB(30, 30, 40));
+        SetBkColor(hdc, COLOR_INPUT_BG);
         SetTextColor(hdc, COLOR_TEXT_WHITE);
-        return (LRESULT)CreateSolidBrush(RGB(30, 30, 40));
+        static HBRUSH hBrush = CreateSolidBrush(COLOR_INPUT_BG);
+        return (LRESULT)hBrush;
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
         SetBkColor(hdc, COLOR_ACCENT_BLUE);
         SetTextColor(hdc, COLOR_TEXT_WHITE);
-        return (LRESULT)CreateSolidBrush(COLOR_ACCENT_BLUE);
+        static HBRUSH hBrush = CreateSolidBrush(COLOR_ACCENT_BLUE);
+        return (LRESULT)hBrush;
+    }
+    case WM_DRAWITEM: {
+        if (wParam == 2) { // Кнопка Send
+            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+            HDC hdc = dis->hDC;
+            RECT rect = dis->rcItem;
+            
+            HBRUSH brush;
+            if (dis->itemState & ODS_SELECTED) {
+                brush = CreateSolidBrush(COLOR_ACCENT_BLUE_DARK);
+            } else if (dis->itemState & ODS_HOTLIGHT) {
+                brush = CreateSolidBrush(COLOR_BUTTON_HOVER);
+            } else {
+                brush = CreateSolidBrush(COLOR_ACCENT_BLUE);
+            }
+            FillRect(hdc, &rect, brush);
+            DeleteObject(brush);
+            
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, COLOR_TEXT_WHITE);
+            HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_SEMIBOLD);
+            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+            DrawTextA(hdc, "Send", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hFont);
+            
+            return TRUE;
+        }
+        break;
     }
     case WM_SIZE: {
         int width = LOWORD(lParam);
@@ -708,41 +801,45 @@ void RegisterWindowClass(const char* className, WNDPROC proc) {
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     WriteLog("--- APP START ---"); 
     WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        MessageBoxA(NULL, "WSAStartup failed", "Error", MB_OK | MB_ICONERROR);
-        return 1;
-    }
-    
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return 1;
+
+    // Сначала РЕГИСТРИРУЕМ все классы
     RegisterWindowClass("ConnectWindow", ConnectWndProc);
     RegisterWindowClass("MainWindow", MainWndProc);
     RegisterWindowClass("SidebarWindow", SidebarWndProc);
     RegisterWindowClass("MessageListWindow", MessageListWndProc);
     
-    // Окно подключения
+    // Параметры окна подключения
+    int connWidth = 420;
+    int connHeight = 450; 
+    int screenX = (GetSystemMetrics(SM_CXSCREEN) - connWidth) / 2;
+    int screenY = (GetSystemMetrics(SM_CYSCREEN) - connHeight) / 2;
+
+    // Создаем окно подключения ПОСЛЕ регистрации класса
     hConnectWnd = CreateWindowExA(0, "ConnectWindow", "AEGIS - Connection",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 400, 320,
-        NULL, NULL, GetModuleHandle(NULL), NULL);
-    
-    // Главное окно (скрыто до подключения)
+        screenX, screenY, connWidth, connHeight,
+        NULL, NULL, hInstance, NULL);
+
+    // Главное окно
     hMainWnd = CreateWindowExA(0, "MainWindow", "AEGIS - Chat",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600,
-        NULL, NULL, GetModuleHandle(NULL), NULL);
+        NULL, NULL, hInstance, NULL);
     
+    if (!hConnectWnd) {
+        WriteLog("Critical Error: hConnectWnd is NULL. LastError: " + std::to_string(GetLastError()));
+        return 0;
+    }
+
     ShowWindow(hConnectWnd, nCmdShow);
     UpdateWindow(hConnectWnd);
     
-    // Цикл сообщений
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-    
-    // Очистка Winsock
     WSACleanup();
-    
     return 0;
 }
-

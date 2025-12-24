@@ -10,6 +10,8 @@
 #include <sstream>
 #include <algorithm>
 #include <cstring>
+#include <richedit.h>
+#pragma comment(lib, "Msimg32.lib")
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -62,7 +64,9 @@ HWND hConnectBtn = NULL;
 HWND hChatList = NULL;
 HWND hMessageList = NULL;
 HWND hInputEdit = NULL;
-HWND hSendBtn = NULL;
+int inputEditHeight = 60; 
+const int INPUT_MIN_HEIGHT = 60;
+const int INPUT_MAX_HEIGHT = 200;
 HWND hSidebar = NULL;
 
 SOCKET clientSocket = INVALID_SOCKET;
@@ -92,6 +96,28 @@ HFONT CreateAppFont(int size, int weight = FONT_WEIGHT_NORMAL) {
     return CreateFontA(size, 0, 0, 0, weight, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, FONT_FAMILY);
+}
+
+// Функция создания шрифта с увеличенным межстрочным интервалом для поля ввода
+HFONT CreateInputFont(int size, int weight = FONT_WEIGHT_NORMAL) {
+    HDC hdc = GetDC(NULL);
+    int logPixels = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(NULL, hdc);
+    
+    // Увеличиваем высоту шрифта для большего межстрочного интервала
+    int height = -MulDiv(size + 2, logPixels, 72); // +2 для дополнительного пространства
+    
+    LOGFONTA lf = {};
+    lf.lfHeight = height;
+    lf.lfWeight = weight;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = CLEARTYPE_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    strcpy_s(lf.lfFaceName, FONT_FAMILY);
+    
+    return CreateFontIndirectA(&lf);
 }
 
 // Вычисление высоты сообщения (объявление перед использованием)
@@ -451,37 +477,67 @@ void SendChatMessage() {
 
 LRESULT CALLBACK ConnectWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-case WM_CREATE: {
-    int fieldW = 300;
-    int fieldH = 30;
-    int startX = (420 - fieldW) / 2 - 10;
+    case WM_CREATE: {
+        int fieldW = 300;
+        int fieldH = 35; // Немного увеличим высоту для крупного текста
+        int startX = (420 - fieldW) / 2 - 10;
 
-    hIPEdit = CreateWindowA("EDIT", "xisyrurdm.localto.net",
-        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
-        startX, 120, fieldW, fieldH, hwnd, NULL, NULL, NULL);
+        hIPEdit = CreateWindowA("EDIT", "xisyrurdm.localto.net",
+            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+            startX, 120, fieldW, fieldH, hwnd, NULL, NULL, NULL);
 
-    hPortEdit = CreateWindowA("EDIT", "6162",
-        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
-        startX, 185, fieldW, fieldH, hwnd, NULL, NULL, NULL);
+        hPortEdit = CreateWindowA("EDIT", "6162",
+            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+            startX, 185, fieldW, fieldH, hwnd, NULL, NULL, NULL);
 
-    hNameEdit = CreateWindowA("EDIT", "",
-        WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
-        startX, 250, fieldW, fieldH, hwnd, NULL, NULL, NULL);
+        hNameEdit = CreateWindowA("EDIT", "",
+            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_AUTOHSCROLL,
+            startX, 250, fieldW, fieldH, hwnd, NULL, NULL, NULL);
 
-    hConnectBtn = CreateWindowA("BUTTON", "Connect",
-        WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
-        startX, 320, fieldW, 45, hwnd, (HMENU)1, NULL, NULL);
-    
-    // Стили и шрифты
-    HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL);
-    SendMessage(hIPEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
-    SendMessage(hPortEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
-    SendMessage(hNameEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
-    SendMessage(hConnectBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
-    break;
+        // Добавляем BS_OWNERDRAW, чтобы сделать кнопку синей
+        hConnectBtn = CreateWindowA("BUTTON", "Connect",
+            WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 
+            startX, 320, fieldW, 45, hwnd, (HMENU)1, NULL, NULL);
+        
+        // Создаем крупный шрифт для полей ввода (размер 20)
+        HFONT hEditFont = CreateAppFont(20, FONT_WEIGHT_NORMAL);
+        SendMessage(hIPEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
+        SendMessage(hPortEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
+        SendMessage(hNameEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
+        break;
     }
-case WM_COMMAND:
-        if (LOWORD(wParam) == 1) { // Кнопка Connect
+
+    case WM_DRAWITEM: {
+        if (wParam == 1) { // Отрисовка кнопки Connect
+            LPDRAWITEMSTRUCT dis = (LPDRAWITEMSTRUCT)lParam;
+            HDC hdc = dis->hDC;
+            RECT rect = dis->rcItem;
+
+            // Определяем цвет (темнее при нажатии)
+            HBRUSH hBtnBrush = CreateSolidBrush((dis->itemState & ODS_SELECTED) ? 
+                               COLOR_ACCENT_BLUE_DARK : COLOR_ACCENT_BLUE);
+            
+            // Рисуем скругленный прямоугольник или обычный
+            FillRect(hdc, &rect, hBtnBrush);
+            DeleteObject(hBtnBrush);
+
+            // Текст кнопки
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, COLOR_TEXT_WHITE);
+            HFONT hBtnFont = CreateAppFont(18, FONT_WEIGHT_BOLD);
+            HFONT hOldFont = (HFONT)SelectObject(hdc, hBtnFont);
+            
+            DrawTextA(hdc, "Connect", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hBtnFont);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == 1) { 
             char ip[256], port[256], name[256];
             GetWindowTextA(hIPEdit, ip, 256);
             GetWindowTextA(hPortEdit, port, 256);
@@ -494,92 +550,63 @@ case WM_COMMAND:
             
             userName = name;
             userAvatar = GetAvatar(userName);
-            
-            // Записываем в лог попытку старта
             WriteLog("Connect button clicked. Target: " + std::string(ip) + ":" + std::string(port));
 
             if (ConnectToServer(ip, port)) {
-                WriteLog("Transition to MainWindow...");
                 ShowWindow(hwnd, SW_HIDE);
                 ShowWindow(hMainWnd, SW_SHOW);
             } else {
-                // Если не подключились, получаем код ошибки Winsock
                 int lastError = WSAGetLastError();
-                std::string logErr = "Connection failed. Winsock Error: " + std::to_string(lastError);
-                WriteLog(logErr);
-                
-                std::wstring wError = L"Ошибка подключения! Код: " + std::to_wstring(lastError) + 
-                                      L"\nПроверьте адрес сервера или брандмауэр.";
-                MessageBoxW(hwnd, wError.c_str(), L"AEGIS Connection Error", MB_OK | MB_ICONERROR);
+                MessageBoxW(hwnd, L"Ошибка подключения! Проверьте данные.", L"Error", MB_OK | MB_ICONERROR);
             }
         }
         break;
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        
         RECT rect;
         GetClientRect(hwnd, &rect);
         HBRUSH brush = CreateSolidBrush(COLOR_BG_DARK);
         FillRect(hdc, &rect, brush);
         DeleteObject(brush);
         
-        // Логотип/Заголовок
         SetTextColor(hdc, COLOR_TEXT_WHITE);
         SetBkMode(hdc, TRANSPARENT);
-        HFONT hFont = CreateAppFont(FONT_SIZE_LARGE, FONT_WEIGHT_BOLD);
-        HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-        
+        HFONT hFontLog = CreateAppFont(FONT_SIZE_LARGE, FONT_WEIGHT_BOLD);
+        SelectObject(hdc, hFontLog);
         RECT textRect = { 0, 32, rect.right, 72 };
         DrawTextA(hdc, "AEGIS", -1, &textRect, DT_CENTER | DT_VCENTER);
-        
-        // Подзаголовок
-        SelectObject(hdc, hOldFont);
-        DeleteObject(hFont);
-        hFont = CreateAppFont(FONT_SIZE_SMALL, FONT_WEIGHT_NORMAL);
-        SelectObject(hdc, hFont);
+        DeleteObject(hFontLog);
+
+        HFONT hLabelFont = CreateAppFont(14, FONT_WEIGHT_NORMAL);
+        SelectObject(hdc, hLabelFont);
         SetTextColor(hdc, COLOR_TEXT_GRAY);
         
-        textRect = { 0, 72, rect.right, 92 };
-        DrawTextA(hdc, "Secure Chat Connection", -1, &textRect, DT_CENTER | DT_VCENTER);
+        // Метки
+        textRect = { 55, 100, 350, 120 }; DrawTextA(hdc, "Server IP address", -1, &textRect, DT_LEFT);
+        textRect = { 55, 165, 350, 185 }; DrawTextA(hdc, "Port", -1, &textRect, DT_LEFT);
+        textRect = { 55, 230, 350, 250 }; DrawTextA(hdc, "Your name", -1, &textRect, DT_LEFT);
         
-        // Метки полей
-        SelectObject(hdc, hOldFont);
-        DeleteObject(hFont);
-        hFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_NORMAL);
-        SelectObject(hdc, hFont);
-        SetTextColor(hdc, COLOR_TEXT_LIGHT_GRAY);
-        
-        textRect = { 50, 100, 350, 120 }; 
-        DrawTextA(hdc, "Server IP address", -1, &textRect, DT_LEFT | DT_VCENTER);
-
-        textRect = { 50, 165, 350, 185 }; 
-        DrawTextA(hdc, "Port", -1, &textRect, DT_LEFT | DT_VCENTER);
-
-        textRect = { 50, 230, 350, 250 }; 
-        DrawTextA(hdc, "Your name", -1, &textRect, DT_LEFT | DT_VCENTER);
-        
-        DeleteObject(hFont);
+        DeleteObject(hLabelFont);
         EndPaint(hwnd, &ps);
         break;
     }
+
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
         SetBkColor(hdc, COLOR_INPUT_BG);
         SetTextColor(hdc, COLOR_TEXT_WHITE);
-        static HBRUSH hBrush = CreateSolidBrush(COLOR_INPUT_BG);
-        return (LRESULT)hBrush;
+        // Чтобы текст не "прилипал" к краям, можно добавить отступы, 
+        // но для простоты используем сплошной цвет фона
+        static HBRUSH hEditBg = CreateSolidBrush(COLOR_INPUT_BG);
+        return (LRESULT)hEditBg;
     }
-    case WM_CTLCOLORBTN: {
-        HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, COLOR_ACCENT_BLUE);
-        SetTextColor(hdc, COLOR_TEXT_WHITE);
-        static HBRUSH hBrush = CreateSolidBrush(COLOR_ACCENT_BLUE);
-        return (LRESULT)hBrush;
-    }
+
     case WM_DESTROY:
         PostQuitMessage(0);
         break;
+
     default:
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -598,36 +625,134 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             WS_VISIBLE | WS_CHILD | WS_VSCROLL,
             250, 0, 750, 550, hwnd, NULL, NULL, NULL);
         
+        // Создаем поле ввода без стандартной рамки (будем рисовать сами)
+        // Убираем ES_WANTRETURN, чтобы контролировать Enter вручную
         hInputEdit = CreateWindowA("EDIT", "",
-            WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
-            250, 550, 650, 52, hwnd, NULL, NULL, NULL);
+            WS_VISIBLE | WS_CHILD | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
+            260, 550, 740, INPUT_MIN_HEIGHT, hwnd, NULL, NULL, NULL);
         
-        hSendBtn = CreateWindowA("BUTTON", "Send",
-            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW,
-            900, 550, 100, 52, hwnd, (HMENU)2, NULL, NULL);
+        // Устанавливаем увеличенный шрифт с увеличенным межстрочным интервалом
+        HFONT hInputFont = CreateInputFont(14, FONT_WEIGHT_NORMAL);
+        SendMessage(hInputEdit, WM_SETFONT, (WPARAM)hInputFont, TRUE);
         
-        // Установка единого шрифта
-        HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL);
-        SendMessage(hInputEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+        // Устанавливаем отступы для текста
+        SendMessage(hInputEdit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(16, 16));
         
-        HFONT hBtnFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_SEMIBOLD);
-        SendMessage(hSendBtn, WM_SETFONT, (WPARAM)hBtnFont, TRUE);
         break;
     }
-    case WM_COMMAND:
-        if (LOWORD(wParam) == 2) { 
-            SendChatMessage();
-        }
-        break;
-    case WM_KEYDOWN:
-        if (wParam == VK_RETURN && GetFocus() == hInputEdit) {
-
-            if (GetKeyState(VK_SHIFT) >= 0) {
-                SendChatMessage();
-                return 0; 
+case WM_COMMAND:
+        if (HIWORD(wParam) == EN_CHANGE && (HWND)lParam == hInputEdit) {
+            // Принудительно перерисовываем родительское окно, чтобы обновить рамку и фон
+            InvalidateRect(hwnd, NULL, FALSE); 
+            
+            // Автоматическое изменение высоты поля ввода
+            RECT rect;
+            GetClientRect(hInputEdit, &rect);
+            HDC hdc = GetDC(hInputEdit);
+            HFONT hFont = CreateInputFont(18, FONT_WEIGHT_NORMAL);
+            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+            
+            int len = GetWindowTextLengthW(hInputEdit);
+            std::vector<wchar_t> buffer(len + 1);
+            GetWindowTextW(hInputEdit, buffer.data(), len + 1);
+            
+            RECT calcRect = { 0, 0, rect.right - 32, 0 };
+            DrawTextW(hdc, buffer.data(), -1, &calcRect, DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL);
+            
+            int textHeight = calcRect.bottom;
+            int newHeight = std::max(INPUT_MIN_HEIGHT, std::min(INPUT_MAX_HEIGHT, textHeight + 32));
+            
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hFont);
+            ReleaseDC(hInputEdit, hdc);
+            
+            if (newHeight != inputEditHeight) {
+                inputEditHeight = newHeight;
+                RECT mainRect;
+                GetClientRect(hwnd, &mainRect);
+                MoveWindow(hInputEdit, 260, mainRect.bottom - inputEditHeight - 10, 
+                          mainRect.right - 270, inputEditHeight, TRUE);
+                MoveWindow(hMessageList, 250, 0, mainRect.right - 250, 
+                          mainRect.bottom - inputEditHeight - 20, TRUE);
+                InvalidateRect(hwnd, NULL, TRUE);
             }
         }
         break;
+
+    case WM_CTLCOLOREDIT: {
+            if ((HWND)lParam == hInputEdit) {
+                HDC hdc = (HDC)wParam;
+                // Устанавливаем непрозрачный режим и цвет фона
+                SetBkMode(hdc, OPAQUE); 
+                SetBkColor(hdc, COLOR_INPUT_BG);
+                SetTextColor(hdc, COLOR_TEXT_WHITE);
+                
+                static HBRUSH hInputBgBrush = CreateSolidBrush(COLOR_INPUT_BG);
+                return (LRESULT)hInputBgBrush;
+            }
+            break;
+        }
+    case WM_KEYDOWN:
+        // Обработка стандартных горячих клавиш
+        if (GetFocus() == hInputEdit) {
+            bool ctrl = GetKeyState(VK_CONTROL) < 0;
+            bool shift = GetKeyState(VK_SHIFT) < 0;
+            
+            if (ctrl) {
+                switch (wParam) {
+                case 'A': case 'a': // Ctrl+A - выделить все
+                    SendMessage(hInputEdit, EM_SETSEL, 0, -1);
+                    return 0;
+                case 'C': case 'c': // Ctrl+C - копировать
+                    SendMessage(hInputEdit, WM_COPY, 0, 0);
+                    return 0;
+                case 'V': case 'v': // Ctrl+V - вставить
+                    SendMessage(hInputEdit, WM_PASTE, 0, 0);
+                    return 0;
+                case 'X': case 'x': // Ctrl+X - вырезать
+                    SendMessage(hInputEdit, WM_CUT, 0, 0);
+                    return 0;
+                case 'Z': case 'z': // Ctrl+Z - отменить
+                    if (shift) {
+                        SendMessage(hInputEdit, EM_REDO, 0, 0); // Ctrl+Shift+Z - повторить
+                    } else {
+                        SendMessage(hInputEdit, EM_UNDO, 0, 0);
+                    }
+                    return 0;
+                }
+            }
+            
+            // Enter без Shift - отправка (блокируем стандартную обработку)
+            if (wParam == VK_RETURN && !shift) {
+                SendChatMessage();
+                return 0; // Блокируем стандартную обработку Enter
+            }
+            // Shift+Enter - разрешаем стандартную обработку (новая строка)
+        }
+        break;
+    case WM_CHAR:
+        // Дополнительная обработка Enter для надежности
+        if (wParam == VK_RETURN && GetFocus() == hInputEdit) {
+            bool shift = GetKeyState(VK_SHIFT) < 0;
+            if (!shift) {
+                // Enter без Shift - отправка, блокируем вставку символа новой строки
+                SendChatMessage();
+                return 0;
+            }
+            // Shift+Enter - разрешаем стандартную обработку (новая строка)
+        }
+        break;
+    case WM_SETFOCUS:
+        if ((HWND)wParam == hInputEdit || GetFocus() == hInputEdit) {
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
+        break;
+    case WM_KILLFOCUS:
+        if ((HWND)wParam == hInputEdit || GetFocus() != hInputEdit) {
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
+        break;
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -638,59 +763,47 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         FillRect(hdc, &rect, brush);
         DeleteObject(brush);
         
-        EndPaint(hwnd, &ps);
-        break;
-    }
-    case WM_CTLCOLOREDIT: {
-        HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, COLOR_INPUT_BG);
-        SetTextColor(hdc, COLOR_TEXT_WHITE);
-        static HBRUSH hBrush = CreateSolidBrush(COLOR_INPUT_BG);
-        return (LRESULT)hBrush;
-    }
-    case WM_CTLCOLORBTN: {
-        HDC hdc = (HDC)wParam;
-        SetBkColor(hdc, COLOR_ACCENT_BLUE);
-        SetTextColor(hdc, COLOR_TEXT_WHITE);
-        static HBRUSH hBrush = CreateSolidBrush(COLOR_ACCENT_BLUE);
-        return (LRESULT)hBrush;
-    }
-    case WM_DRAWITEM: {
-        if (wParam == 2) { // Кнопка Send
-            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
-            HDC hdc = dis->hDC;
-            RECT rect = dis->rcItem;
+        // Рисуем поле ввода с круглыми углами
+        if (hInputEdit) {
+            RECT inputRect;
+            GetWindowRect(hInputEdit, &inputRect);
+            ScreenToClient(hwnd, (LPPOINT)&inputRect);
+            ScreenToClient(hwnd, ((LPPOINT)&inputRect) + 1);
             
-            HBRUSH brush;
-            if (dis->itemState & ODS_SELECTED) {
-                brush = CreateSolidBrush(COLOR_ACCENT_BLUE_DARK);
-            } else if (dis->itemState & ODS_HOTLIGHT) {
-                brush = CreateSolidBrush(COLOR_BUTTON_HOVER);
-            } else {
-                brush = CreateSolidBrush(COLOR_ACCENT_BLUE);
-            }
-            FillRect(hdc, &rect, brush);
-            DeleteObject(brush);
+            // Расширяем область для отрисовки рамки
+            inputRect.left -= 2;
+            inputRect.top -= 2;
+            inputRect.right += 2;
+            inputRect.bottom += 2;
             
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, COLOR_TEXT_WHITE);
-            HFONT hFont = CreateAppFont(FONT_SIZE_NORMAL, FONT_WEIGHT_SEMIBOLD);
-            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-            DrawTextA(hdc, "Send", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            SelectObject(hdc, hOldFont);
-            DeleteObject(hFont);
+            // Проверяем, есть ли фокус
+            bool hasFocus = (GetFocus() == hInputEdit);
             
-            return TRUE;
+            // Фон поля ввода
+            HBRUSH inputBrush = CreateSolidBrush(COLOR_INPUT_BG);
+            HPEN inputPen = CreatePen(PS_SOLID, hasFocus ? 2 : 1, 
+                                     hasFocus ? COLOR_ACCENT_BLUE : COLOR_INPUT_BORDER);
+            HPEN oldPen = (HPEN)SelectObject(hdc, inputPen);
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, inputBrush);
+            
+            // Рисуем скругленный прямоугольник
+            RoundRect(hdc, inputRect.left, inputRect.top, inputRect.right, inputRect.bottom, 14, 14);
+            
+            SelectObject(hdc, oldPen);
+            SelectObject(hdc, oldBrush);
+            DeleteObject(inputBrush);
+            DeleteObject(inputPen);
         }
+        
+        EndPaint(hwnd, &ps);
         break;
     }
     case WM_SIZE: {
         int width = LOWORD(lParam);
         int height = HIWORD(lParam);
         MoveWindow(hSidebar, 0, 0, 250, height, TRUE);
-        MoveWindow(hMessageList, 250, 0, width - 250, height - 50, TRUE);
-        MoveWindow(hInputEdit, 250, height - 50, width - 350, 50, TRUE);
-        MoveWindow(hSendBtn, width - 100, height - 50, 100, 50, TRUE);
+        MoveWindow(hMessageList, 250, 0, width - 250, height - inputEditHeight - 20, TRUE);
+        MoveWindow(hInputEdit, 260, height - inputEditHeight - 10, width - 270, inputEditHeight, TRUE);
         InvalidateRect(hwnd, NULL, TRUE);
         InvalidateRect(hSidebar, NULL, TRUE);
         InvalidateRect(hMessageList, NULL, TRUE);
@@ -801,6 +914,7 @@ void RegisterWindowClass(const char* className, WNDPROC proc) {
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     WriteLog("--- APP START ---"); 
     WSADATA wsaData;
+    LoadLibraryA("Msftedit.dll");
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return 1;
 
     // Сначала РЕГИСТРИРУЕМ все классы
@@ -837,6 +951,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
+        // Перехват Enter для поля ввода сообщения
+        if (msg.message == WM_KEYDOWN && msg.hwnd == hInputEdit) {
+            if (msg.wParam == VK_RETURN) {
+                // Если Shift НЕ зажат — отправляем сообщение
+                if (!(GetKeyState(VK_SHIFT) & 0x8000)) {
+                    SendChatMessage();
+                    continue; // Пропускаем TranslateMessage, чтобы не добавлять перевод строки
+                }
+            }
+        }
+        
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }

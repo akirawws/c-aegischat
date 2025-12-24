@@ -201,3 +201,106 @@
 [19:02:39] Transition to MainWindow...
 [19:02:39] Receive thread started.
 [19:02:45] Receive thread exiting.
+[19:03:38] --- APP START ---
+[19:03:38] Registering class: ConnectWindow
+[19:03:38] Class ConnectWindow registered successfully.
+[19:03:38] Registering class: MainWindow
+[19:03:38] Class MainWindow registered successfully.
+[19:03:38] Registering class: SidebarWindow
+[19:03:38] Class SidebarWindow registered successfully.
+[19:03:38] Registering class: MessageListWindow
+[19:03:38] Class MessageListWindow registered successfully.
+[19:04:58] --- APP START ---
+[19:04:58] Registering class: ConnectWindow
+[19:04:58] Class ConnectWindow registered successfully.
+[19:04:58] Registering class: MainWindow
+[19:04:58] Class MainWindow registered successfully.
+[19:04:58] Registering class: SidebarWindow
+[19:04:58] Class SidebarWindow registered successfully.
+[19:04:58] Registering class: MessageListWindow
+[19:04:58] Class MessageListWindow registered successfully.
+[19:05:03] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:05:03] Step 1: Cleaning up old sockets...
+[19:05:03] Step 2: Resolving address: xisyrurdm.localto.net
+[19:05:03] Step 3: Creating socket...
+[19:05:03] Step 4: Connecting to server...
+[19:05:03] Step 5: Connection established successfully.
+[19:05:03] Receive thread started.
+[19:09:06] Receive thread exiting.
+[19:10:42] --- APP START ---
+[19:10:42] Registering class: ConnectWindow
+[19:10:42] Class ConnectWindow registered successfully.
+[19:10:42] Registering class: MainWindow
+[19:10:42] Class MainWindow registered successfully.
+[19:10:42] Registering class: SidebarWindow
+[19:10:42] Class SidebarWindow registered successfully.
+[19:10:42] Registering class: MessageListWindow
+[19:10:42] Class MessageListWindow registered successfully.
+[19:10:46] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:10:46] Step 1: Cleaning up old sockets...
+[19:10:46] Step 2: Resolving address: xisyrurdm.localto.net
+[19:10:46] Step 3: Creating socket...
+[19:10:46] Step 4: Connecting to server...
+[19:10:46] Step 5: Connection established successfully.
+[19:10:46] Receive thread started.
+[19:11:06] Receive thread exiting.
+[19:13:38] --- APP START ---
+[19:13:38] Registering class: ConnectWindow
+[19:13:38] Class ConnectWindow registered successfully.
+[19:13:38] Registering class: MainWindow
+[19:13:38] Class MainWindow registered successfully.
+[19:13:38] Registering class: SidebarWindow
+[19:13:38] Class SidebarWindow registered successfully.
+[19:13:38] Registering class: MessageListWindow
+[19:13:38] Class MessageListWindow registered successfully.
+[19:13:43] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:13:43] Step 1: Cleaning up old sockets...
+[19:13:43] Step 2: Resolving address: xisyrurdm.localto.net
+[19:13:43] Step 3: Creating socket...
+[19:13:43] Step 4: Connecting to server...
+[19:13:43] Step 5: Connection established successfully.
+[19:13:43] Receive thread started.
+[19:16:37] Receive thread exiting.
+[19:16:51] --- APP START ---
+[19:16:51] Registering class: ConnectWindow
+[19:16:51] Class ConnectWindow registered successfully.
+[19:16:51] Registering class: MainWindow
+[19:16:51] Class MainWindow registered successfully.
+[19:16:51] Registering class: SidebarWindow
+[19:16:51] Class SidebarWindow registered successfully.
+[19:16:51] Registering class: MessageListWindow
+[19:16:51] Class MessageListWindow registered successfully.
+[19:17:41] --- APP START ---
+[19:17:41] Registering class: ConnectWindow
+[19:17:41] Class ConnectWindow registered successfully.
+[19:17:41] Registering class: MainWindow
+[19:17:41] Class MainWindow registered successfully.
+[19:17:41] Registering class: SidebarWindow
+[19:17:41] Class SidebarWindow registered successfully.
+[19:17:41] Registering class: MessageListWindow
+[19:17:41] Class MessageListWindow registered successfully.
+[19:17:44] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:17:44] Step 1: Cleaning up old sockets...
+[19:17:44] Step 2: Resolving address: xisyrurdm.localto.net
+[19:17:44] Step 3: Creating socket...
+[19:17:44] Step 4: Connecting to server...
+[19:17:44] Step 5: Connection established successfully.
+[19:17:44] Receive thread started.
+[19:20:05] Receive thread exiting.
+[19:20:16] --- APP START ---
+[19:20:16] Registering class: ConnectWindow
+[19:20:16] Class ConnectWindow registered successfully.
+[19:20:16] Registering class: MainWindow
+[19:20:16] Class MainWindow registered successfully.
+[19:20:16] Registering class: SidebarWindow
+[19:20:16] Class SidebarWindow registered successfully.
+[19:20:16] Registering class: MessageListWindow
+[19:20:16] Class MessageListWindow registered successfully.
+[19:20:20] Connect button clicked. Target: xisyrurdm.localto.net:6162
+[19:20:20] Step 1: Cleaning up old sockets...
+[19:20:20] Step 2: Resolving address: xisyrurdm.localto.net
+[19:20:20] Step 3: Creating socket...
+[19:20:20] Step 4: Connecting to server...
+[19:20:20] Step 5: Connection established successfully.
+[19:20:20] Receive thread started.
+[19:20:45] Receive thread exiting.

@@ -9,12 +9,17 @@
 #include "Utils/Keyboard.h"
 #include "Utils/Network.h"
 #include "Utils/UIState.h"
+#include <map>
+#include <vector>
+#include <commctrl.h>
+#pragma comment(lib, "comctl32.lib")
 
 HWND hMainWnd = NULL;
 extern int inputEditHeight;
 extern HWND hMessageList;
 extern HWND hInputEdit;
-
+extern std::vector<Message> messages;
+extern std::map<std::string, std::vector<Message>> chatHistories;
 const int SIDEBAR_ICONS = 72;
 const int SIDEBAR_DM    = 240;
 
@@ -24,6 +29,19 @@ void DrawDebugRect(HDC hdc, int x, int y, int w, int h, COLORREF color) {
     HBRUSH br = CreateSolidBrush(color);
     FillRect(hdc, &r, br);
     DeleteObject(br);
+}
+
+LRESULT CALLBACK MessageInputSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (uMsg == WM_CHAR && wParam == VK_RETURN) {
+        // Если нажат Enter (и не нажат Shift)
+        if (!(GetKeyState(VK_SHIFT) & 0x8000)) {
+            HWND hMain = (HWND)dwRefData;
+            // Посылаем сигнал родителю выполнить отправку
+            SendMessage(hMain, WM_COMMAND, MAKEWPARAM(1001, 0), 0);
+            return 0; // Блокируем стандартный звук "писк" Windows на Enter
+        }
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 HWND CreateMainPage(HINSTANCE hInstance, int x, int y, int width, int height) {
@@ -45,30 +63,37 @@ void ShowChatUI(bool show) {
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         
+
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == 1001) {
+            OutputDebugStringA("ENTER PRESSED -> SEND\n");
+            SendPrivateMessageFromUI();
+        }
+        break;
+    }
+
+
 case WM_CREATE: {
     int startX = SIDEBAR_ICONS + SIDEBAR_DM;
     // Создаем чат СРАЗУ с правильными координатами, чтобы он не перекрывал лево
     CreateMessageList(hwnd, startX, 0, 100, 100); 
     CreateMessageInput(hwnd, startX + 10, 100, 100, INPUT_MIN_HEIGHT);
+    SetFocus(hInputEdit);
+
     
-    // ТЕСТОВЫЕ ДАННЫЕ для сайдбара с друзьями
-    std::vector<DMUser> testUsers = {
-        {"User1", "user1_id"},
-        {"User2", "user2_id"},
-        {"User3", "user3_id"},
-        {"User4", "user4_id"},
-        {"User5", "user5_id"}
-    };
-    SetDMUsers(testUsers);
     
     // Инициализация состояния UI
     g_uiState.currentPage = AppPage::Friends;
     g_uiState.activeChatUser = "";
     
+
     // Отладочный вывод
     OutputDebugStringA("Main window created with test users\n");
     
     ShowChatUI(false); 
+    if (hInputEdit) {
+        SetWindowSubclass(hInputEdit, MessageInputSubclass, 0, (DWORD_PTR)hwnd);
+    }
     return 0;
 }
 
@@ -97,44 +122,49 @@ case WM_LBUTTONDOWN: {
     return 0;
 }
 
-    case WM_PAINT: {
+case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rect;
         GetClientRect(hwnd, &rect);
 
-        // Double Buffering
+        // 1. Подготовка Double Buffering
         HDC memDC = CreateCompatibleDC(hdc);
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
         HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
-        // 1. Общий фон
+        // 2. Фон
         HBRUSH hBg = CreateSolidBrush(COLOR_BG_DARK);
         FillRect(memDC, &rect, hBg);
         DeleteObject(hBg);
 
-        // 2. Сайдбар 1 (Иконки)
+        // 3. Отрисовка Сайдбаров
         OnPaintSidebar(memDC, SIDEBAR_ICONS, rect.bottom);
-
-        // 3. Сайдбар 2 (Друзья/ЛС)
-        // Если он не рисуется - мы увидим COLOR_BG_DARK из шага 1
         DrawSidebarFriends(memDC, hwnd, SIDEBAR_ICONS, 0, SIDEBAR_DM, rect.bottom);
 
-        // 4. Контент
-        int contentX = SIDEBAR_ICONS + SIDEBAR_DM; // 312
+        // 4. Отрисовка Контента (Правая часть)
+        int contentX = SIDEBAR_ICONS + SIDEBAR_DM; // 312 пикселей отступ
         int contentW = rect.right - contentX;
+        int contentH = rect.bottom;
 
         if (g_uiState.currentPage == AppPage::Friends) {
-            // Передаем правильную ширину и высоту
             DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
-            // Примечание: Если вы поправили FriendsPage.cpp как указано выше, 
-            // она сама отступит 312 пикселей.
-        } else {
-            DrawMessagePage(memDC, contentX, 0, contentW, rect.bottom);
-}
+        } 
+        else {
+            // ИСПРАВЛЕНИЕ: Используем вычисленные координаты и правильный вектор сообщений
+            // Если у вас выбран конкретный пользователь, передаем его историю:
+            if (chatHistories.count(g_uiState.activeChatUser)) {
+                DrawMessagePage(memDC, contentX, 0, contentW, contentH, chatHistories[g_uiState.activeChatUser]);
+            } else {
+                // Если истории еще нет или это общий чат
+                DrawMessagePage(memDC, contentX, 0, contentW, contentH, messages);
+            }
+        }
 
+        // 5. Копирование из буфера на экран
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
 
+        // Чистка ресурсов
         SelectObject(memDC, oldBitmap);
         DeleteObject(memBitmap);
         DeleteDC(memDC);
@@ -170,3 +200,4 @@ case WM_LBUTTONDOWN: {
     }
     return 0;
 }
+

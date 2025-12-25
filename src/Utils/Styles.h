@@ -30,6 +30,7 @@
 
 HFONT CreateAppFont(int size, int weight = FONT_WEIGHT_NORMAL);
 HFONT CreateInputFont(int size, int weight = FONT_WEIGHT_NORMAL);
+void DrawRoundedRect(HDC hdc, RECT r, COLORREF color, int radius);
 
 #endif
 

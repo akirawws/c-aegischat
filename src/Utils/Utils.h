@@ -6,10 +6,12 @@
 #include <windows.h>
 
 struct Message {
-    std::string text;
-    bool isUser;
     std::string sender;
-    std::string timeStr;
+    std::string text;
+    bool isMine = false;     
+    std::string time;           
+    bool isUser = false;        
+    std::string timeStr;        
 };
 
 std::string GetAvatar(const std::string& name);

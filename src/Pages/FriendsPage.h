@@ -19,5 +19,6 @@ enum class FriendsFilter { All, Online, Pending };
 
 void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height);
 void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance);
+void AddUserToDMList(const std::string& username); 
 
 #endif

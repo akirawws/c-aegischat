@@ -2,19 +2,19 @@
 #define AUTH_PROTOCOL_H
 
 #include <cstdint>
-#include <cstring>
 
-// Все типы пакетов должны быть в одном месте
+#pragma pack(push, 1) 
+
 enum PacketType : uint8_t {
     PACKET_LOGIN = 1,
     PACKET_REGISTER = 2,
     PACKET_AUTH_RESPONSE = 3,
     PACKET_FRIEND_REQUEST = 4,
-    PACKET_FRIEND_ACCEPT = 5,  // Добавили в enum
-    PACKET_FRIEND_REJECT = 6   // Добавили в enum
+    PACKET_FRIEND_ACCEPT = 5,
+    PACKET_FRIEND_REJECT = 6,
+    PACKET_ROOM_LIST = 7,      
+    PACKET_CHAT_MESSAGE = 8    
 };
-
-#pragma pack(push, 1) 
 
 struct AuthPacket {
     uint8_t type;
@@ -36,12 +36,23 @@ struct FriendPacket {
     char senderUsername[64];
 };
 
-// ТА САМАЯ СТРУКТУРА, КОТОРОЙ НЕ ХВАТАЛО:
 struct FriendActionPacket {
-    uint8_t type;            // PACKET_FRIEND_ACCEPT или REJECT
-    char targetUsername[64]; // Имя того, чью заявку мы обрабатываем
+    uint8_t type;
+    char targetUsername[64];
 };
 
-#pragma pack(pop)
+struct RoomPacket {
+    uint8_t type;
+    char username[64]; // Сделал 64 для единообразия
+};
 
+struct ChatMessagePacket {
+    uint8_t type;
+    char senderUsername[64];   
+    char targetUsername[64];  
+    char content[384];       
+};
+
+
+#pragma pack(pop)
 #endif

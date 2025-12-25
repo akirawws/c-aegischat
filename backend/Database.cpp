@@ -196,3 +196,84 @@ bool Database::HandleFriendAction(const std::string& sender, const std::string& 
         return success;
     }
 }
+bool Database::AcceptFriendAndCreateRoom(const std::string& sender, const std::string& target) {
+    if (!conn) return false;
+
+    PQexec(conn, "BEGIN");
+
+    const char* params[2] = { sender.c_str(), target.c_str() };
+    PGresult* res1 = PQexecParams(conn,
+        "UPDATE friendships SET status = 'accepted' "
+        "WHERE (user_id_1 = (SELECT id FROM users WHERE username = $1) AND user_id_2 = (SELECT id FROM users WHERE username = $2)) "
+        "OR (user_id_1 = (SELECT id FROM users WHERE username = $2) AND user_id_2 = (SELECT id FROM users WHERE username = $1))",
+        2, NULL, params, NULL, NULL, 0);
+
+    if (PQresultStatus(res1) != PGRES_COMMAND_OK) {
+        PQexec(conn, "ROLLBACK");
+        PQclear(res1);
+        return false;
+    }
+
+    // 2. Создаем комнату, гарантируя, что меньший ID всегда первый (чтобы избежать дублей)
+    std::string createRoomQuery = 
+        "INSERT INTO dm_rooms (user_1, user_2) "
+        "SELECT LEAST(u1.id, u2.id), GREATEST(u1.id, u2.id) "
+        "FROM users u1, users u2 "
+        "WHERE u1.username = $1 AND u2.username = $2 "
+        "ON CONFLICT DO NOTHING";
+
+    PGresult* res2 = PQexecParams(conn, createRoomQuery.c_str(), 2, NULL, params, NULL, NULL, 0);
+
+    if (PQresultStatus(res2) != PGRES_COMMAND_OK) {
+        PQexec(conn, "ROLLBACK");
+        PQclear(res1); PQclear(res2);
+        return false;
+    }
+
+    PQexec(conn, "COMMIT");
+    PQclear(res1); PQclear(res2);
+    return true;
+}
+
+std::vector<std::string> Database::GetAcceptedFriends(const std::string& username) {
+    std::vector<std::string> friends;
+    if (!conn) return friends;
+
+    const char* params[1] = { username.c_str() };
+
+    std::string query = 
+        "SELECT CASE WHEN u1.username = $1 THEN u2.username ELSE u1.username END "
+        "FROM friendships f "
+        "JOIN users u1 ON f.user_id_1 = u1.id "
+        "JOIN users u2 ON f.user_id_2 = u2.id "
+        "WHERE (u1.username = $1 OR u2.username = $1) AND f.status = 'accepted'";
+
+    PGresult* res = PQexecParams(conn, query.c_str(), 1, NULL, params, NULL, NULL, 0);
+
+    if (PQresultStatus(res) == PGRES_TUPLES_OK) {
+        for (int i = 0; i < PQntuples(res); i++) {
+            friends.push_back(PQgetvalue(res, i, 0));
+        }
+    }
+    PQclear(res);
+    return friends;
+}
+bool Database::SaveMessage(const std::string& sender, const std::string& target, const std::string& text) {
+    if (!conn) return false;
+    const char* params[3] = { sender.c_str(), target.c_str(), text.c_str() };
+    
+    // Запрос находит нужный room_id и вставляет сообщение
+    std::string query = 
+        "INSERT INTO messages (room_id, sender_id, content) "
+        "SELECT r.id, u.id, $3 "
+        "FROM dm_rooms r "
+        "JOIN users u ON u.username = $1 "
+        "WHERE (r.user_1 = u.id OR r.user_2 = u.id) "
+        "AND (r.user_1 = (SELECT id FROM users WHERE username = $2) "
+        "OR r.user_2 = (SELECT id FROM users WHERE username = $2))";
+
+    PGresult* res = PQexecParams(conn, query.c_str(), 3, NULL, params, NULL, NULL, 0);
+    bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    return success;
+}

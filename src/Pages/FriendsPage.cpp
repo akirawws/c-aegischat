@@ -2,6 +2,7 @@
 #include "Utils/Styles.h"
 #include "Utils/Network.h"
 #include "Utils/FriendsUtils.h"
+#include "Components/SidebarFriends.h"
 #include <vector>
 #include <mutex>
 
@@ -12,6 +13,7 @@ const int CONTENT_START_X = SIDEBAR_ICONS_W + SIDEBAR_DM_W; // 312
 FriendsFilter currentFilter = FriendsFilter::Online;
 std::vector<PendingRequest> pendingRequests;
 std::mutex pendingMutex;
+extern void AddUserToDMList(HWND hwnd, const std::string& username);
 
 // UI Colors
 #define COLOR_BG            RGB(32, 34, 37)
@@ -24,15 +26,7 @@ std::mutex pendingMutex;
 #define COLOR_GREEN         RGB(67, 181, 129)
 #define COLOR_RED           RGB(240, 71, 71)
 #define COLOR_BUTTON        RGB(88, 101, 242)
-void DrawRoundedRect(HDC hdc, RECT r, COLORREF color, int radius = 10) {
-    HBRUSH brush = CreateSolidBrush(color);
-    HPEN pen = CreatePen(PS_SOLID, 1, color);
-    SelectObject(hdc, brush);
-    SelectObject(hdc, pen);
-    RoundRect(hdc, r.left, r.top, r.right, r.bottom, radius, radius);
-    DeleteObject(brush);
-    DeleteObject(pen);
-}
+
 
 void DrawCenteredText(HDC hdc, const wchar_t* text, RECT r, COLORREF color, HFONT font) {
     SetBkMode(hdc, TRANSPARENT);
@@ -69,7 +63,7 @@ void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
     for (int i = 0; i < 3; i++) {
         RECT fr = { fx, 12, fx + 90, 44 };
         if ((int)currentFilter == i)
-            DrawRoundedRect(hdc, fr, COLOR_CARD);
+            DrawRoundedRect(hdc, fr, COLOR_CARD, 10);
         
         DrawCenteredText(
             hdc, filters[i], fr,
@@ -81,26 +75,22 @@ void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
 
     // === Add Friend Button ===
     RECT btnAdd = { width - 200, 12, width - 20, 44 };
-    DrawRoundedRect(hdc, btnAdd, COLOR_BUTTON);
+    DrawRoundedRect(hdc, btnAdd, COLOR_BUTTON, 10);
     DrawCenteredText(hdc, L"+ Добавить друга", btnAdd, COLOR_TEXT_MAIN, fontNormal);
 
 if (currentFilter == FriendsFilter::Pending) {
         std::lock_guard<std::mutex> lock(pendingMutex);
 
-        int yPos = 72; // Начальная позиция под хедером
+        int yPos = 72; 
         for (const auto& req : pendingRequests) {
-            // Карточка заявки
             RECT card = { CONTENT_START_X + 20, yPos, width - 20, yPos + 56 };
             DrawRoundedRect(hdc, card, COLOR_CARD, 8);
 
-            // Имя пользователя
             RECT nameRect = { card.left + 15, card.top, card.right - 130, card.bottom };
             SetTextColor(hdc, COLOR_TEXT_MAIN);
             SelectObject(hdc, fontNormal);
-            // Используем DrawTextA, так как в структуре req.username скорее всего std::string
             DrawTextA(hdc, req.username.c_str(), -1, &nameRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-            // Кнопки Принять/Отклонить (должны совпадать с координатами в HandleFriendsClick)
             RECT btnAccept = { card.right - 110, card.top + 12, card.right - 65, card.bottom - 12 };
             RECT btnReject = { card.right - 55, card.top + 12, card.right - 10, card.bottom - 12 };
 
@@ -110,7 +100,7 @@ if (currentFilter == FriendsFilter::Pending) {
             DrawCenteredText(hdc, L"✔", btnAccept, COLOR_TEXT_MAIN, fontNormal);
             DrawCenteredText(hdc, L"✖", btnReject, COLOR_TEXT_MAIN, fontNormal);
 
-            yPos += 66; // Смещение для следующей карточки
+            yPos += 66; 
         }
 
         if (pendingRequests.empty()) {
@@ -163,10 +153,13 @@ void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
             RECT reject = { rect.right - 60, yPos + 12, rect.right - 12, yPos + 44 };
 
             if (PtInRect(&accept, { x, y })) {
-                AcceptFriendRequest(pendingRequests[i].username);
-                pendingRequests.erase(pendingRequests.begin() + i);
+                std::string acceptedName = pendingRequests[i].username;
+                AcceptFriendRequest(acceptedName); 
+                AddUserToDMList(hwnd, acceptedName);
+                
+                pendingRequests.erase(pendingRequests.begin() + i); // OK, так как мы сразу делаем return
                 InvalidateRect(hwnd, NULL, FALSE);
-                return;
+                return; // Обязательно выходим из функции
             }
             if (PtInRect(&reject, { x, y })) {
                 RejectFriendRequest(pendingRequests[i].username);

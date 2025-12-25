@@ -18,6 +18,9 @@ public:
     bool AuthenticateUser(const std::string& login, const std::string& pass);
     bool AddFriendRequest(const std::string& sender, const std::string& target);
     std::vector<std::string> GetPendingRequests(const std::string& username);
+    bool AcceptFriendAndCreateRoom(const std::string& sender, const std::string& target);
+    std::vector<std::string> GetAcceptedFriends(const std::string& username);
+    bool SaveMessage(const std::string& sender, const std::string& target, const std::string& text);
 private:
     PGconn* conn; 
     std::map<std::string, std::string> LoadEnv(const std::string& filename);

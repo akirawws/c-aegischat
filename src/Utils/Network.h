@@ -28,7 +28,7 @@ void ReceiveMessages();
 void ParseMessage(const std::string& msg);
 void SendChatMessage(); 
 void StartMessageSystem();
-
+void SendPrivateMessageFromUI();
 bool SendPacket(const char* data, int size);
 bool ReceivePacket(char* data, int size);
 

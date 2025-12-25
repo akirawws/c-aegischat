@@ -2,12 +2,15 @@
 #include "Utils/Utils.h"
 #include "Components/MessageList.h"
 #include "Components/MessageInput.h"
+#include "Components/SidebarFriends.h"
 #include "AuthProtocol.h" 
 #include "Pages/FriendsPage.h"
 #include <ws2tcpip.h>
 #include <vector>
 #include <algorithm>
 #include <mutex>
+#include <map>
+
 
 SOCKET clientSocket = INVALID_SOCKET;
 bool isConnected = false;
@@ -18,7 +21,7 @@ std::string userAvatar = "[^.^]";
 extern std::vector<PendingRequest> pendingRequests;
 extern std::mutex pendingMutex; 
 extern HWND hMainWnd;
-
+std::map<std::string, std::vector<Message>> chatHistories;
 bool ConnectToServer(const std::string& address, const std::string& port) {
     if (clientSocket != INVALID_SOCKET) {
         isConnected = false;
@@ -54,24 +57,7 @@ bool ConnectToServer(const std::string& address, const std::string& port) {
     return true;
 }
 
-void SendChatMessage() {
-    extern HWND hInputEdit;
-    if (!isConnected || clientSocket == INVALID_SOCKET) return;
 
-    int len = GetWindowTextLengthW(hInputEdit);
-    if (len > 0) {
-        std::vector<wchar_t> buffer(len + 1);
-        GetWindowTextW(hInputEdit, buffer.data(), len + 1);
-        
-        std::string text = WideToUtf8(buffer.data());
-        std::string fullMsg = userAvatar + " " + userName + ": " + text + "\n";
-
-        if (send(clientSocket, fullMsg.c_str(), (int)fullMsg.length(), 0) != SOCKET_ERROR) {
-            SetWindowTextW(hInputEdit, L"");
-            UpdateInputHeight(GetParent(hInputEdit), hInputEdit, hMessageList);
-        }
-    }
-}
 
 void StartMessageSystem() {
     if (isConnected && clientSocket != INVALID_SOCKET) {
@@ -172,43 +158,88 @@ void ReceiveMessages() {
     char buffer[4096];
     while (isConnected && clientSocket != INVALID_SOCKET) {
         ZeroMemory(buffer, sizeof(buffer));
-        
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         
         if (bytesReceived > 0) {
             uint8_t packetType = (uint8_t)buffer[0];
 
-            // 1. Пакет заявки в друзья
+            // 1. Пакет новой входящей заявки в друзья
             if (packetType == PACKET_FRIEND_REQUEST) {
                 if (bytesReceived >= sizeof(FriendPacket)) {
                     FriendPacket* fPkt = (FriendPacket*)buffer;
-                    
-                    PendingRequest newReq;
                     char safeName[33] = {0}; 
-                    // Используем memcpy или strncpy для безопасности
                     memcpy(safeName, fPkt->senderUsername, 32);
-                    newReq.username = safeName;
                     
-                    // КРИТИЧЕСКИ ВАЖНО: защищаем доступ к вектору мьютексом
                     {
                         std::lock_guard<std::mutex> lock(pendingMutex);
-                        
-                        // Проверка на дубликаты, чтобы не добавлять одного и того же дважды
                         auto it = std::find_if(pendingRequests.begin(), pendingRequests.end(),
-                            [&](const PendingRequest& r) { return r.username == newReq.username; });
+                            [&](const PendingRequest& r) { return r.username == safeName; });
                         
                         if (it == pendingRequests.end()) {
-                            pendingRequests.push_back(newReq);
+                            pendingRequests.push_back({ safeName });
                         }
                     }
-                    
-                    // Перерисовываем главное окно, чтобы увидеть изменения в разделе "Ожидание"
-                    if (hMainWnd) {
-                        InvalidateRect(hMainWnd, NULL, TRUE);
-                    }
+                    if (hMainWnd) InvalidateRect(hMainWnd, NULL, TRUE);
                 }
             }
-            // 2. Обычный чат
+            else if (packetType == PACKET_ROOM_LIST) {
+                if (bytesReceived >= sizeof(RoomPacket)) {
+                    RoomPacket* rPkt = (RoomPacket*)buffer;
+                    char name[33] = {0};
+                    memcpy(name, rPkt->username, 32);
+                    
+                    // Добавляем в список без принудительной перерисовки каждого элемента
+                    AddUserToDMList(hMainWnd, std::string(name));
+                }
+            }
+
+            else if (packetType == PACKET_CHAT_MESSAGE) {
+                if (bytesReceived >= sizeof(ChatMessagePacket)) {
+                    ChatMessagePacket* cPkt = (ChatMessagePacket*)buffer;
+                    
+                    Message m;
+                    m.text = cPkt->content;
+                    m.sender = cPkt->senderUsername;
+                    m.isMine = false;
+                    m.timeStr = GetCurrentTimeStr();
+
+                    // 1. Сохраняем в общий архив
+                    chatHistories[m.sender].push_back(m);
+                    
+                    // 2. ВАЖНО: Если у нас открыт чат именно с этим человеком — добавляем в текущий список
+                    if (g_uiState.activeChatUser == m.sender) {
+                        messages.push_back(m);
+                    }
+                    
+                    // 3. Принудительно перерисовываем
+                    InvalidateRect(hMainWnd, NULL, FALSE);
+                    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
+                }
+            }
+            // 2. Пакет подтверждения дружбы (ЗАЯВКА ПРИНЯТА)
+            else if (packetType == PACKET_FRIEND_ACCEPT) {
+                if (bytesReceived >= sizeof(FriendActionPacket)) {
+                    FriendActionPacket* aPkt = (FriendActionPacket*)buffer;
+                    char safeName[65] = {0}; // Размер из AuthProtocol.h (64 + 1)
+                    memcpy(safeName, aPkt->targetUsername, 64);
+
+                    // Добавляем в список ЛС
+                    AddUserToDMList(hMainWnd, std::string(safeName));
+
+                    // Если этот человек был в списке "Ожидание", удаляем его оттуда
+                    {
+                        std::lock_guard<std::mutex> lock(pendingMutex);
+                        pendingRequests.erase(
+                            std::remove_if(pendingRequests.begin(), pendingRequests.end(),
+                                [&](const PendingRequest& r) { return r.username == safeName; }),
+                            pendingRequests.end()
+                        );
+                    }
+
+                    if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+                }
+            }
+            // 3. Обычный текстовый чат (для обратной совместимости)
             else {
                 buffer[bytesReceived] = '\0';
                 ParseMessage(std::string(buffer));
@@ -221,5 +252,78 @@ void ReceiveMessages() {
     if (clientSocket != INVALID_SOCKET) {
         closesocket(clientSocket);
         clientSocket = INVALID_SOCKET;
+    }
+}
+
+void OnFriendRequestAccepted(std::string username) {
+    AddUserToDMList(hMainWnd, username);
+    InvalidateRect(hMainWnd, NULL, FALSE);
+}
+
+void SendPrivateMessage(const std::string& target, const std::string& text) {
+    if (text.empty() || target.empty() || !isConnected) return;
+
+    ChatMessagePacket pkt{};
+    pkt.type = PACKET_CHAT_MESSAGE;
+
+    strncpy(pkt.senderUsername, userName.c_str(), sizeof(pkt.senderUsername) - 1);
+    strncpy(pkt.targetUsername, target.c_str(), sizeof(pkt.targetUsername) - 1);
+    strncpy(pkt.content, text.c_str(), sizeof(pkt.content) - 1);
+
+
+    if (send(clientSocket, (char*)&pkt, sizeof(ChatMessagePacket), 0) != SOCKET_ERROR) {
+        Message m;
+        m.text = text;
+        m.sender = userName; // Моё имя
+        m.isMine = true;
+        m.time = GetCurrentTimeStr();
+
+        chatHistories[target].push_back(m);
+
+        if (g_uiState.activeChatUser == target) {
+            messages.push_back(m);   // ← ДОБАВИТЬ
+        }
+
+        InvalidateRect(hMessageList, NULL, TRUE);
+    
+        if (hMainWnd) {
+            InvalidateRect(hMainWnd, NULL, FALSE); 
+            UpdateWindow(hMainWnd);
+        }
+    }
+}
+
+void SendPrivateMessageFromUI() {
+    if (!isConnected || clientSocket == INVALID_SOCKET) return;
+    if (g_uiState.activeChatUser.empty()) return;
+
+    char msgBuf[447]; 
+    GetWindowTextA(hInputEdit, msgBuf, 447);
+    std::string messageText = msgBuf;
+
+    ChatMessagePacket pkt{};
+    pkt.type = PACKET_CHAT_MESSAGE;
+
+    strncpy(pkt.senderUsername, userName.c_str(), sizeof(pkt.senderUsername) - 1);
+    strncpy(pkt.targetUsername, g_uiState.activeChatUser.c_str(), sizeof(pkt.targetUsername) - 1);
+    strncpy(pkt.content, messageText.c_str(), sizeof(pkt.content) - 1);
+
+
+    if (send(clientSocket, (char*)&pkt, sizeof(ChatMessagePacket), 0) != SOCKET_ERROR) { 
+        Message m;
+        m.text = messageText;
+        m.sender = userName;
+        m.isMine = true;
+        m.timeStr = GetCurrentTimeStr();
+        
+        chatHistories[g_uiState.activeChatUser].push_back(m);
+        messages.push_back(m); // Это наполнит текущий экран
+
+        SetWindowTextA(hInputEdit, "");
+        InvalidateRect(hMessageList, NULL, TRUE);
+        UpdateWindow(hMessageList); 
+        
+        // Отладка в консоль клиента
+        printf("Sent to %s: %s\n", pkt.targetUsername, pkt.content);
     }
 }

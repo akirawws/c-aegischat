@@ -39,7 +39,7 @@ bool HandleKeyboardInput(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, HWN
         }
         
         if (wParam == VK_RETURN && !shift) {
-            SendChatMessage();
+            SendPrivateMessageFromUI();
             return true;
         }
     }
@@ -61,7 +61,7 @@ void ProcessMessageLoop() {
         if (msg.message == WM_KEYDOWN && msg.hwnd == hInputEdit) {
             if (msg.wParam == VK_RETURN) {
                 if (!(GetKeyState(VK_SHIFT) & 0x8000)) {
-                    SendChatMessage();
+                    SendPrivateMessageFromUI();
                     continue;
                 }
             }

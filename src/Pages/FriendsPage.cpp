@@ -7,13 +7,9 @@
 
 FriendsFilter currentFilter = FriendsFilter::Online;
 
-// Структура для отображения заявок
-struct PendingRequest {
-    std::string username;
-};
 
 std::vector<PendingRequest> pendingRequests;
-
+std::mutex pendingMutex;
 
 
 
@@ -64,16 +60,19 @@ void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
         startX += 90;
     }
 
-    // --- Кнопка добавить в друзья ---
     RECT btnAdd = { width - 170, 10, width - 20, 38 };
-    HBRUSH hBtnBrush = CreateSolidBrush(RGB(36, 128, 70));
-    RoundRect(hdc, btnAdd.left, btnAdd.top, btnAdd.right, btnAdd.bottom, 5, 5);
+    HBRUSH hBtnBrush = CreateSolidBrush(RGB(36, 128, 70)); 
+    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBtnBrush);
+    HPEN hBtnPen = CreatePen(PS_SOLID, 1, RGB(36, 128, 70));
+    HPEN hOldBtnPen = (HPEN)SelectObject(hdc, hBtnPen);
+    RoundRect(hdc, btnAdd.left, btnAdd.top, btnAdd.right, btnAdd.bottom, 8, 8);
     SetTextColor(hdc, RGB(255, 255, 255));
+    SetBkMode(hdc, TRANSPARENT);
     DrawTextW(hdc, L"Добавить в друзья", -1, &btnAdd, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-    DeleteObject(hBtnBrush);
 
     // --- Список ожиданий (если фильтр = Ожидание) ---
     if (currentFilter == FriendsFilter::Pending) {
+        std::lock_guard<std::mutex> lock(pendingMutex);
         int y = 60;
         int itemHeight = 40;
         for (auto& req : pendingRequests) {

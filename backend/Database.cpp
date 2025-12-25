@@ -4,6 +4,7 @@
 #include <sstream>
 #include <map>
 #include <cstring> // Для работы с C-строками, если понадобится
+#include <vector>
 
 // ИСПРАВЛЕНО: Теперь LoadEnv является методом класса Database
 std::map<std::string, std::string> Database::LoadEnv(const std::string& filename) {
@@ -36,6 +37,33 @@ std::map<std::string, std::string> Database::LoadEnv(const std::string& filename
         }
     }
     return env;
+}
+std::vector<std::string> Database::GetPendingRequests(const std::string& username) {
+    std::vector<std::string> senders;
+    if (!conn) return senders;
+
+    // Ищем отправителей (u1.username), где получатель (u2.username) — это наш пользователь
+    // и статус дружбы — 'pending'
+    std::string query = 
+        "SELECT u1.username FROM users u1 "
+        "JOIN friendships f ON u1.id = f.user_id_1 "
+        "JOIN users u2 ON u2.id = f.user_id_2 "
+        "WHERE u2.username = $1 AND f.status = 'pending'";
+
+    const char* paramValues[1] = { username.c_str() };
+    PGresult* res = PQexecParams(conn, query.c_str(), 1, NULL, paramValues, NULL, NULL, 0);
+
+    if (PQresultStatus(res) == PGRES_TUPLES_OK) {
+        int rows = PQntuples(res);
+        for (int i = 0; i < rows; i++) {
+            senders.push_back(PQgetvalue(res, i, 0));
+        }
+    } else {
+        std::cerr << "[DB] Ошибка получения заявок: " << PQerrorMessage(conn) << std::endl;
+    }
+
+    PQclear(res);
+    return senders;
 }
 
 Database::Database() : conn(nullptr) {

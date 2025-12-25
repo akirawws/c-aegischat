@@ -5,7 +5,7 @@
 
 // Глобальная переменная или extern, где хранится имя текущего пользователя после логина
 // Тебе нужно убедиться, что при логине ты записываешь имя в эту переменную
-extern std::string currentUserName; 
+extern std::string userName;
 
 struct ModalContext {
     AddFriendModalResult* res;
@@ -127,17 +127,26 @@ bool SendFriendRequest(const std::string& username) {
     strncpy(packet.targetUsername, username.c_str(), sizeof(packet.targetUsername) - 1);
     
     // Копируем имя того, КТО шлет (нас)
-    strncpy(packet.senderUsername, currentUserName.c_str(), sizeof(packet.senderUsername) - 1);
+    strncpy(packet.senderUsername, userName.c_str(), sizeof(packet.senderUsername) - 1);
 
     // Отправляем на сервер
     return send(clientSocket, (char*)&packet, sizeof(FriendPacket), 0) != SOCKET_ERROR;
 }
 
 bool AcceptFriendRequest(const std::string& username) {
-    // Здесь логика будет похожей: отправить пакет PACKET_FRIEND_ACCEPT
-    return true;
+    FriendActionPacket packet;
+    packet.type = PACKET_FRIEND_ACCEPT;
+    memset(packet.targetUsername, 0, 32);
+    strncpy(packet.targetUsername, username.c_str(), 31);
+
+    return SendPacket((char*)&packet, sizeof(FriendActionPacket));
 }
 
 bool RejectFriendRequest(const std::string& username) {
-    return true;
+    FriendActionPacket packet;
+    packet.type = PACKET_FRIEND_REJECT;
+    memset(packet.targetUsername, 0, 32);
+    strncpy(packet.targetUsername, username.c_str(), 31);
+
+    return SendPacket((char*)&packet, sizeof(FriendActionPacket));
 }

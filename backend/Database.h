@@ -4,6 +4,7 @@
 #include <libpq-fe.h>
 #include <string>
 #include <map>
+#include <vector> 
 
 class Database {
 public:
@@ -13,12 +14,12 @@ public:
     bool Connect();
     void Disconnect();
     
-    // Новые методы для авторизации
     bool RegisterUser(const std::string& user, const std::string& email, const std::string& pass);
     bool AuthenticateUser(const std::string& login, const std::string& pass);
     bool AddFriendRequest(const std::string& sender, const std::string& target);
+    std::vector<std::string> GetPendingRequests(const std::string& username);
 private:
-    PGconn* conn;
+    PGconn* conn; 
     std::map<std::string, std::string> LoadEnv(const std::string& filename);
 };
 

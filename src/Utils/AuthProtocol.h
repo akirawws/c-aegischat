@@ -1,5 +1,7 @@
 #ifndef AUTH_PROTOCOL_H
 #define AUTH_PROTOCOL_H
+#define PACKET_FRIEND_ACCEPT 5
+#define PACKET_FRIEND_REJECT 6
 
 #include <cstdint>
 #include <cstring>
@@ -18,6 +20,10 @@ struct AuthPacket {
     char email[128];
     char password[128];
     bool rememberMe;
+};
+struct FriendActionPacket {
+    uint8_t type;
+    char targetUsername[32];
 };
 
 struct ResponsePacket {

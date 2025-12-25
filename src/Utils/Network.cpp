@@ -2,9 +2,12 @@
 #include "Utils/Utils.h"
 #include "Components/MessageList.h"
 #include "Components/MessageInput.h"
+#include "AuthProtocol.h" 
+#include "Pages/FriendsPage.h"
 #include <ws2tcpip.h>
 #include <vector>
 #include <algorithm>
+#include <mutex>
 
 SOCKET clientSocket = INVALID_SOCKET;
 bool isConnected = false;
@@ -12,6 +15,9 @@ std::thread receiveThread;
 std::string userName = "User"; 
 std::string currentUserName = "";
 std::string userAvatar = "[^.^]";
+extern std::vector<PendingRequest> pendingRequests;
+extern std::mutex pendingMutex; 
+extern HWND hMainWnd;
 
 bool ConnectToServer(const std::string& address, const std::string& port) {
     if (clientSocket != INVALID_SOCKET) {
@@ -165,14 +171,55 @@ bool ReceivePacket(char* data, int size) {
 void ReceiveMessages() {
     char buffer[4096];
     while (isConnected && clientSocket != INVALID_SOCKET) {
-        ZeroMemory(buffer, 4096);
-        int bytesReceived = recv(clientSocket, buffer, 4050, 0);
+        ZeroMemory(buffer, sizeof(buffer));
+        
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        
         if (bytesReceived > 0) {
-            buffer[bytesReceived] = '\0';
-            ParseMessage(std::string(buffer));
+            uint8_t packetType = (uint8_t)buffer[0];
+
+            // 1. Пакет заявки в друзья
+            if (packetType == PACKET_FRIEND_REQUEST) {
+                if (bytesReceived >= sizeof(FriendPacket)) {
+                    FriendPacket* fPkt = (FriendPacket*)buffer;
+                    
+                    PendingRequest newReq;
+                    char safeName[33] = {0}; 
+                    // Используем memcpy или strncpy для безопасности
+                    memcpy(safeName, fPkt->senderUsername, 32);
+                    newReq.username = safeName;
+                    
+                    // КРИТИЧЕСКИ ВАЖНО: защищаем доступ к вектору мьютексом
+                    {
+                        std::lock_guard<std::mutex> lock(pendingMutex);
+                        
+                        // Проверка на дубликаты, чтобы не добавлять одного и того же дважды
+                        auto it = std::find_if(pendingRequests.begin(), pendingRequests.end(),
+                            [&](const PendingRequest& r) { return r.username == newReq.username; });
+                        
+                        if (it == pendingRequests.end()) {
+                            pendingRequests.push_back(newReq);
+                        }
+                    }
+                    
+                    // Перерисовываем главное окно, чтобы увидеть изменения в разделе "Ожидание"
+                    if (hMainWnd) {
+                        InvalidateRect(hMainWnd, NULL, TRUE);
+                    }
+                }
+            }
+            // 2. Обычный чат
+            else {
+                buffer[bytesReceived] = '\0';
+                ParseMessage(std::string(buffer));
+            }
         } else {
             break;
         }
     }
     isConnected = false;
+    if (clientSocket != INVALID_SOCKET) {
+        closesocket(clientSocket);
+        clientSocket = INVALID_SOCKET;
+    }
 }

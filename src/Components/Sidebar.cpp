@@ -5,97 +5,153 @@
 
 HWND hSidebar = NULL;
 
-// Перечисляем типы страниц для удобства
-enum class PageType { Friends, Chat };
+// Активная страница
+static int g_activeIndex = 0;
+static int g_hoverIndex  = -1;
 
-// Функция для отрисовки кругов (без изменений, добавлена для полноты)
-void DrawDiscordCircle(HDC hdc, int x, int y, int radius, COLORREF color, const std::wstring& text, bool isEmoji) {
+// ---------- Цветовая палитра (Discord style) ----------
+constexpr COLORREF SIDEBAR_BG        = RGB(30, 31, 34);
+constexpr COLORREF ITEM_BG           = RGB(54, 57, 63);
+constexpr COLORREF ITEM_BG_HOVER     = RGB(64, 68, 75);
+constexpr COLORREF ITEM_BG_ACTIVE    = RGB(88, 101, 242);
+constexpr COLORREF DIVIDER_COLOR     = RGB(45, 47, 51);
+constexpr COLORREF TEXT_WHITE        = RGB(255, 255, 255);
+
+// ---------- Вспомогательное: скруглённый круг ----------
+void DrawSmoothCircle(HDC hdc, int cx, int cy, int r, COLORREF color) {
     HBRUSH brush = CreateSolidBrush(color);
+    HPEN pen = CreatePen(PS_NULL, 0, 0);
+
     HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
-    HPEN pen = CreatePen(PS_NULL, 0, 0); 
     HPEN oldPen = (HPEN)SelectObject(hdc, pen);
 
-    Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+    Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
 
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 255, 255));
-    
-    HFONT hFont;
-    if (isEmoji) {
-        hFont = CreateFontW(26, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
-                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
-                            DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Emoji");
-    } else {
-        hFont = CreateAppFont(14, FONT_WEIGHT_BOLD); 
-    }
-    
-    HFONT oldFont = (HFONT)SelectObject(hdc, hFont);
-    RECT textRect = { x - radius, y - radius, x + radius, y + radius };
-    DrawTextW(hdc, text.c_str(), -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-    SelectObject(hdc, oldFont);
-    DeleteObject(hFont);
     SelectObject(hdc, oldBrush);
-    DeleteObject(brush);
     SelectObject(hdc, oldPen);
+    DeleteObject(brush);
     DeleteObject(pen);
 }
 
+// ---------- Рисование элемента ----------
+void DrawSidebarItem(
+    HDC hdc,
+    int centerX,
+    int centerY,
+    const std::wstring& text,
+    bool emoji,
+    bool active,
+    bool hover
+) {
+    COLORREF bg =
+        active ? ITEM_BG_ACTIVE :
+        hover  ? ITEM_BG_HOVER  :
+                 ITEM_BG;
+
+    DrawSmoothCircle(hdc, centerX, centerY, 22, bg);
+
+    HFONT font;
+    if (emoji) {
+        font = CreateFontW(
+            26, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE,
+            L"Segoe UI Emoji"
+        );
+    } else {
+        font = CreateAppFont(13, FW_BOLD);
+    }
+
+    HFONT oldFont = (HFONT)SelectObject(hdc, font);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, TEXT_WHITE);
+
+    RECT r = { centerX - 22, centerY - 22, centerX + 22, centerY + 22 };
+    DrawTextW(hdc, text.c_str(), -1, &r,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    SelectObject(hdc, oldFont);
+    DeleteObject(font);
+}
+
+// ---------- Отрисовка сайдбара ----------
 void OnPaintSidebar(HDC hdc, int width, int height) {
-    RECT rect = { 0, 0, width, height };
-    HBRUSH bgBrush = CreateSolidBrush(COLOR_BG_SIDEBAR);
-    FillRect(hdc, &rect, bgBrush);
+    RECT bg = { 0, 0, width, height };
+    HBRUSH bgBrush = CreateSolidBrush(SIDEBAR_BG);
+    FillRect(hdc, &bg, bgBrush);
     DeleteObject(bgBrush);
 
     int centerX = width / 2;
-    
-    // 1. Логотип/Щит (Открывает FriendsPage)
-    DrawDiscordCircle(hdc, centerX, 35, 24, COLOR_BG_BLUE, L"🛡", true);
+    int y = 36;
 
-    // Разделитель
-    HPEN pen = CreatePen(PS_SOLID, 2, RGB(50, 53, 59));
-    SelectObject(hdc, pen);
-    MoveToEx(hdc, centerX - 15, 70, NULL);
-    LineTo(hdc, centerX + 15, 70);
+    // --- Shield / Friends ---
+    DrawSidebarItem(
+        hdc,
+        centerX,
+        y,
+        L"🛡",
+        true,
+        g_activeIndex == 0,
+        g_hoverIndex == 0
+    );
+
+    // Divider
+    HPEN pen = CreatePen(PS_SOLID, 1, DIVIDER_COLOR);
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    MoveToEx(hdc, centerX - 12, y + 32, nullptr);
+    LineTo(hdc, centerX + 12, y + 32);
+    SelectObject(hdc, oldPen);
     DeleteObject(pen);
 
-    // 2. Список чатов (Открывают MessagePage)
-    int currentY = 105;
-    const wchar_t* chatNames[] = { L"gen", L"dev", L"news", L"off" };
-    COLORREF colors[] = { COLOR_ACCENT_BLUE, RGB(88, 101, 242), RGB(67, 181, 129), RGB(114, 137, 218) };
+    // --- Chats ---
+    const wchar_t* chats[] = { L"gen", L"dev", L"news", L"off" };
+    y += 60;
 
     for (int i = 0; i < 4; i++) {
-        DrawDiscordCircle(hdc, centerX, currentY, 24, colors[i], chatNames[i], false);
-        currentY += 60; 
+        DrawSidebarItem(
+            hdc,
+            centerX,
+            y,
+            chats[i],
+            false,
+            g_activeIndex == (i + 1),
+            g_hoverIndex == (i + 1)
+        );
+        y += 56;
     }
 }
+
+// ---------- Window ----------
 HWND CreateSidebar(HWND hParent, int x, int y, int width, int height) {
-    hSidebar = CreateWindowA("SidebarWindow", "",
+    hSidebar = CreateWindowA(
+        "SidebarWindow",
+        "",
         WS_VISIBLE | WS_CHILD,
-        x, y, width, height, hParent, NULL, (HINSTANCE)GetWindowLongPtr(hParent, GWLP_HINSTANCE), NULL);
-        
+        x, y, width, height,
+        hParent,
+        nullptr,
+        (HINSTANCE)GetWindowLongPtr(hParent, GWLP_HINSTANCE),
+        nullptr
+    );
     return hSidebar;
 }
 
+// ---------- Proc ----------
+LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_MOUSEMOVE: {
+            int y = HIWORD(lParam);
+            int index = -1;
 
-LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            RECT rect;
-            GetClientRect(hwnd, &rect);
-            HDC memDC = CreateCompatibleDC(hdc);
-            HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
+            if (y >= 14 && y <= 58) index = 0;
+            else if (y >= 96 && y <= 300)
+                index = 1 + (y - 96) / 56;
 
-            OnPaintSidebar(memDC, rect.right, rect.bottom);
-
-            BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
-            SelectObject(memDC, oldBitmap);
-            DeleteObject(memBitmap);
-            DeleteDC(memDC);
-            EndPaint(hwnd, &ps);
+            if (index != g_hoverIndex) {
+                g_hoverIndex = index;
+                InvalidateRect(hwnd, nullptr, TRUE);
+            }
             return 0;
         }
 
@@ -103,16 +159,40 @@ LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             int y = HIWORD(lParam);
             HWND hMain = GetParent(hwnd);
 
-            // Клик по Щиту (FriendsPage)
-            if (y >= 10 && y <= 60) {
-                SendMessage(hMain, WM_USER + 2, 0, 0); // Сигнал: открыть Friends
+            if (y >= 14 && y <= 58) {
+                g_activeIndex = 0;
+                SendMessage(hMain, WM_USER + 2, 0, 0);
+            } else if (y >= 96 && y <= 300) {
+                g_activeIndex = 1 + (y - 96) / 56;
+                SendMessage(hMain, WM_USER + 1, 0, 0);
             }
-            // Клик по иконкам чатов
-            else if (y >= 80 && y <= 350) {
-                SendMessage(hMain, WM_USER + 1, 0, 0); // Сигнал: открыть Chat
-            }
+
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return 0;
+        }
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+
+            RECT r;
+            GetClientRect(hwnd, &r);
+
+            HDC memDC = CreateCompatibleDC(hdc);
+            HBITMAP bmp = CreateCompatibleBitmap(hdc, r.right, r.bottom);
+            HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, bmp);
+
+            OnPaintSidebar(memDC, r.right, r.bottom);
+
+            BitBlt(hdc, 0, 0, r.right, r.bottom, memDC, 0, 0, SRCCOPY);
+
+            SelectObject(memDC, oldBmp);
+            DeleteObject(bmp);
+            DeleteDC(memDC);
+
+            EndPaint(hwnd, &ps);
             return 0;
         }
     }
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    return DefWindowProc(hwnd, msg, wParam, lParam);
 }

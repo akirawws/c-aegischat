@@ -167,3 +167,32 @@ bool Database::AddFriendRequest(const std::string& sender, const std::string& ta
     PQclear(res);
     return success;
 }
+bool Database::HandleFriendAction(const std::string& sender, const std::string& target, bool accept) {
+    if (!conn) return false;
+
+    if (accept) {
+        // Меняем статус на 'accepted'
+        const char* params[2] = { sender.c_str(), target.c_str() };
+        PGresult* res = PQexecParams(conn,
+            "UPDATE friendships SET status = 'accepted' "
+            "WHERE user_id_1 = (SELECT id FROM users WHERE username = $1) "
+            "AND user_id_2 = (SELECT id FROM users WHERE username = $2)",
+            2, NULL, params, NULL, NULL, 0);
+        
+        bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+        PQclear(res);
+        return success;
+    } else {
+        // При отклонении — просто удаляем запись
+        const char* params[2] = { sender.c_str(), target.c_str() };
+        PGresult* res = PQexecParams(conn,
+            "DELETE FROM friendships "
+            "WHERE user_id_1 = (SELECT id FROM users WHERE username = $1) "
+            "AND user_id_2 = (SELECT id FROM users WHERE username = $2)",
+            2, NULL, params, NULL, NULL, 0);
+        
+        bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+        PQclear(res);
+        return success;
+    }
+}

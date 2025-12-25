@@ -4,9 +4,9 @@
 #include "Utils/Network.h"
 #include "Utils/AuthProtocol.h"
 #include "Utils/HashPassword.h"
+#include "Pages/MainPage.h"
 #include <cstring>
 #include <string>
-
 
 // Состояния страницы
 enum AuthState { STATE_LOGIN, STATE_REGISTER };
@@ -66,8 +66,6 @@ HWND CreateAuthPage(HINSTANCE hInstance, int x, int y, int width, int height) {
 
     return hAuthWnd;
 }
-
-
 
 LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -140,8 +138,6 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
 
             // 2. ХЕШИРОВАНИЕ ПАРОЛЯ
-            // Используем имя пользователя (name) в качестве соли. 
-            // Это гарантирует, что даже одинаковые пароли у разных юзеров будут иметь разные хеши.
             std::string hashedPassword = HashPassword(pass, name);
 
             // 3. Подготовка пакета
@@ -154,10 +150,7 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
 
             strncpy(packet.username, name, sizeof(packet.username) - 1);
-            
-            // ВАЖНО: Копируем именно hashedPassword вместо чистого pass
             strncpy(packet.password, hashedPassword.c_str(), sizeof(packet.password) - 1); 
-            
             packet.rememberMe = (SendMessage(hRememberCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
             // 4. Отправка и обработка ответа
@@ -173,8 +166,47 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             userName = name; 
                             StartMessageSystem(); // Запуск фонового потока чата
                             WriteLog("User logged in: " + userName);
+                            
+                            // СОЗДАЕМ главное окно, если оно еще не создано
+                            if (!hMainWnd) {
+                                WriteLog("Creating main window...");
+                                
+                                // Получаем дескриптор экземпляра приложения
+                                HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+                                
+                                // Создаем главное окно с центрированием
+                                int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+                                int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+                                int windowWidth = 1200;
+                                int windowHeight = 700;
+                                int x = (screenWidth - windowWidth) / 2;
+                                int y = (screenHeight - windowHeight) / 2;
+                                
+                                hMainWnd = CreateMainPage(hInstance, x, y, windowWidth, windowHeight);
+                                
+                                if (!hMainWnd) {
+                                    WriteLog("Failed to create main window! Error: " + std::to_string(GetLastError()));
+                                    MessageBoxA(hwnd, "Failed to create main window", "Error", MB_OK | MB_ICONERROR);
+                                    return 0;
+                                }
+                                
+                                WriteLog("Main window created successfully. Handle: " + 
+                                        std::to_string((long long)hMainWnd));
+                            }
+                            
+                            // Скрываем окно авторизации
                             ShowWindow(hwnd, SW_HIDE);
-                            ShowWindow(hMainWnd, SW_SHOW);
+                            
+                            // Показываем главное окно
+                            if (hMainWnd) {
+                                WriteLog("Showing main window...");
+                                ShowWindow(hMainWnd, SW_SHOW);
+                                UpdateWindow(hMainWnd);
+                                SetForegroundWindow(hMainWnd);
+                                SetFocus(hMainWnd);
+                                SetActiveWindow(hMainWnd);
+                                BringWindowToTop(hMainWnd);
+                            }
                         }
                     } else {
                         MessageBoxA(hwnd, response.message, "Auth Error", MB_OK | MB_ICONERROR);

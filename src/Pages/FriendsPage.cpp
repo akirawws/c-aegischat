@@ -2,166 +2,179 @@
 #include "Utils/Styles.h"
 #include "Utils/Network.h"
 #include "Utils/FriendsUtils.h"
-#include <string>
 #include <vector>
+#include <mutex>
+
+const int SIDEBAR_ICONS_W = 72;
+const int SIDEBAR_DM_W    = 240;
+const int CONTENT_START_X = SIDEBAR_ICONS_W + SIDEBAR_DM_W; // 312
 
 FriendsFilter currentFilter = FriendsFilter::Online;
-
-
 std::vector<PendingRequest> pendingRequests;
 std::mutex pendingMutex;
 
+// UI Colors
+#define COLOR_BG            RGB(32, 34, 37)
+#define COLOR_HEADER        RGB(49, 51, 56)
+#define COLOR_CARD          RGB(54, 57, 63)
+#define COLOR_CARD_HOVER    RGB(64, 68, 75)
+#define COLOR_TEXT_MAIN     RGB(255, 255, 255)
+#define COLOR_TEXT_MUTED    RGB(180, 185, 193)
+
+#define COLOR_GREEN         RGB(67, 181, 129)
+#define COLOR_RED           RGB(240, 71, 71)
+#define COLOR_BUTTON        RGB(88, 101, 242)
+void DrawRoundedRect(HDC hdc, RECT r, COLORREF color, int radius = 10) {
+    HBRUSH brush = CreateSolidBrush(color);
+    HPEN pen = CreatePen(PS_SOLID, 1, color);
+    SelectObject(hdc, brush);
+    SelectObject(hdc, pen);
+    RoundRect(hdc, r.left, r.top, r.right, r.bottom, radius, radius);
+    DeleteObject(brush);
+    DeleteObject(pen);
+}
+
+void DrawCenteredText(HDC hdc, const wchar_t* text, RECT r, COLORREF color, HFONT font) {
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, color);
+    SelectObject(hdc, font);
+    DrawTextW(hdc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+}
 
 
 void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
-    int sidebarWidth = 72;
-    int contentX = sidebarWidth;
+    // === Background ===
+    // Рисуем только в правой части окна
+    RECT bg = { CONTENT_START_X, 0, width, height };
+    HBRUSH hBrBg = CreateSolidBrush(COLOR_BG);
+    FillRect(hdc, &bg, hBrBg);
+    DeleteObject(hBrBg);
 
-    // --- Фон ---
-    RECT bgRect = { contentX, 0, width, height };
-    HBRUSH hBgBrush = CreateSolidBrush(COLOR_BG_DARK);
-    FillRect(hdc, &bgRect, hBgBrush);
-    DeleteObject(hBgBrush);
+    // === Header ===
+    RECT header = { CONTENT_START_X, 0, width, 56 };
+    HBRUSH hBrHead = CreateSolidBrush(COLOR_HEADER);
+    FillRect(hdc, &header, hBrHead);
+    DeleteObject(hBrHead);
 
-    // --- Header ---
-    RECT headerRect = { contentX, 0, width, 48 };
-    HBRUSH hHeaderBrush = CreateSolidBrush(RGB(49, 51, 56));
-    FillRect(hdc, &headerRect, hHeaderBrush);
+    HFONT fontTitle = CreateAppFont(16, FW_BOLD);
+    HFONT fontNormal = CreateAppFont(13, FW_NORMAL);
 
-    HPEN hPen = CreatePen(PS_SOLID, 1, RGB(30, 31, 34));
-    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-    MoveToEx(hdc, contentX, 48, NULL);
-    LineTo(hdc, width, 48);
+    RECT titleRect = { CONTENT_START_X + 16, 0, CONTENT_START_X + 150, 56 };
+    DrawCenteredText(hdc, L"Друзья", titleRect, COLOR_TEXT_MAIN, fontTitle);
 
-    // --- Заголовок и фильтры ---
-    SetBkMode(hdc, TRANSPARENT);
-    HFONT hFontBold = CreateAppFont(14, FONT_WEIGHT_BOLD);
-    HFONT hOldFont = (HFONT)SelectObject(hdc, hFontBold);
-
-    RECT textFriends = { contentX + 15, 0, contentX + 100, 48 };
-    SetTextColor(hdc, RGB(255, 255, 255));
-    DrawTextW(hdc, L"Друзья", -1, &textFriends, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-
-    MoveToEx(hdc, contentX + 85, 15, NULL);
-    LineTo(hdc, contentX + 85, 33);
-
+    // === Filters ===
     const wchar_t* filters[] = { L"В сети", L"Все", L"Ожидание" };
-    int startX = contentX + 100;
+    int fx = CONTENT_START_X + 160;
+
     for (int i = 0; i < 3; i++) {
-        bool isActive = ((int)currentFilter == i);
-        SetTextColor(hdc, isActive ? RGB(255, 255, 255) : RGB(181, 186, 193));
-        RECT r = { startX, 10, startX + 80, 38 };
-        if (isActive) {
-            HBRUSH hActive = CreateSolidBrush(RGB(67, 71, 78));
-            FillRect(hdc, &r, hActive);
-            DeleteObject(hActive);
-        }
-        DrawTextW(hdc, filters[i], -1, &r, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-        startX += 90;
+        RECT fr = { fx, 12, fx + 90, 44 };
+        if ((int)currentFilter == i)
+            DrawRoundedRect(hdc, fr, COLOR_CARD);
+        
+        DrawCenteredText(
+            hdc, filters[i], fr,
+            (currentFilter == (FriendsFilter)i) ? COLOR_TEXT_MAIN : COLOR_TEXT_MUTED,
+            fontNormal
+        );
+        fx += 100;
     }
 
-    RECT btnAdd = { width - 170, 10, width - 20, 38 };
-    HBRUSH hBtnBrush = CreateSolidBrush(RGB(36, 128, 70)); 
-    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBtnBrush);
-    HPEN hBtnPen = CreatePen(PS_SOLID, 1, RGB(36, 128, 70));
-    HPEN hOldBtnPen = (HPEN)SelectObject(hdc, hBtnPen);
-    RoundRect(hdc, btnAdd.left, btnAdd.top, btnAdd.right, btnAdd.bottom, 8, 8);
-    SetTextColor(hdc, RGB(255, 255, 255));
-    SetBkMode(hdc, TRANSPARENT);
-    DrawTextW(hdc, L"Добавить в друзья", -1, &btnAdd, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    // === Add Friend Button ===
+    RECT btnAdd = { width - 200, 12, width - 20, 44 };
+    DrawRoundedRect(hdc, btnAdd, COLOR_BUTTON);
+    DrawCenteredText(hdc, L"+ Добавить друга", btnAdd, COLOR_TEXT_MAIN, fontNormal);
 
-    // --- Список ожиданий (если фильтр = Ожидание) ---
-    if (currentFilter == FriendsFilter::Pending) {
+if (currentFilter == FriendsFilter::Pending) {
         std::lock_guard<std::mutex> lock(pendingMutex);
-        int y = 60;
-        int itemHeight = 40;
-        for (auto& req : pendingRequests) {
-            RECT r = { contentX + 10, y, width - 10, y + itemHeight };
-            HBRUSH hItemBrush = CreateSolidBrush(RGB(67, 71, 78));
-            FillRect(hdc, &r, hItemBrush);
-            DeleteObject(hItemBrush);
 
-            SetTextColor(hdc, RGB(255, 255, 255));
-            DrawTextA(hdc, req.username.c_str(), -1, &r, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+        int yPos = 72; // Начальная позиция под хедером
+        for (const auto& req : pendingRequests) {
+            // Карточка заявки
+            RECT card = { CONTENT_START_X + 20, yPos, width - 20, yPos + 56 };
+            DrawRoundedRect(hdc, card, COLOR_CARD, 8);
 
-            // Кнопки принять и отклонить
-            RECT btnAccept = { r.right - 80, r.top + 5, r.right - 45, r.bottom - 5 };
-            RECT btnReject = { r.right - 40, r.top + 5, r.right - 5, r.bottom - 5 };
-            HBRUSH hGreen = CreateSolidBrush(RGB(36, 128, 70));
-            FillRect(hdc, &btnAccept, hGreen);
-            DeleteObject(hGreen);
-            HBRUSH hRed = CreateSolidBrush(RGB(183, 28, 28));
-            FillRect(hdc, &btnReject, hRed);
-            DeleteObject(hRed);
+            // Имя пользователя
+            RECT nameRect = { card.left + 15, card.top, card.right - 130, card.bottom };
+            SetTextColor(hdc, COLOR_TEXT_MAIN);
+            SelectObject(hdc, fontNormal);
+            // Используем DrawTextA, так как в структуре req.username скорее всего std::string
+            DrawTextA(hdc, req.username.c_str(), -1, &nameRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-            y += itemHeight + 5;
+            // Кнопки Принять/Отклонить (должны совпадать с координатами в HandleFriendsClick)
+            RECT btnAccept = { card.right - 110, card.top + 12, card.right - 65, card.bottom - 12 };
+            RECT btnReject = { card.right - 55, card.top + 12, card.right - 10, card.bottom - 12 };
+
+            DrawRoundedRect(hdc, btnAccept, COLOR_GREEN, 6);
+            DrawRoundedRect(hdc, btnReject, COLOR_RED, 6);
+
+            DrawCenteredText(hdc, L"✔", btnAccept, COLOR_TEXT_MAIN, fontNormal);
+            DrawCenteredText(hdc, L"✖", btnReject, COLOR_TEXT_MAIN, fontNormal);
+
+            yPos += 66; // Смещение для следующей карточки
+        }
+
+        if (pendingRequests.empty()) {
+            RECT emptyRect = { CONTENT_START_X, 100, width, height };
+            DrawCenteredText(hdc, L"Список ожидающих заявок пуст", emptyRect, COLOR_TEXT_MUTED, fontNormal);
         }
     }
 
-    // --- Заглушка если нет друзей ---
-    if (pendingRequests.empty() && currentFilter == FriendsFilter::Pending) {
-        RECT emptyRect = { contentX, 48, width, height };
-        SetTextColor(hdc, RGB(148, 155, 164));
-        DrawTextW(hdc, L"Заявок пока нет.", -1, &emptyRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-
-    // Очистка
-    SelectObject(hdc, hOldFont);
-    SelectObject(hdc, hOldPen);
-    DeleteObject(hFontBold);
-    DeleteObject(hHeaderBrush);
-    DeleteObject(hPen);
+    // Освобождаем ресурсы
+    DeleteObject(fontTitle);
+    DeleteObject(fontNormal);
 }
 
-void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
-    int sidebarWidth = 72;
 
-    // --- Переключение фильтров ---
-    int startX = sidebarWidth + 100;
+void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
+    // ВАЖНО: используем 312 (72 + 240), как и при отрисовке
+    int fx = CONTENT_START_X + 160; 
+
+    // 1. Проверка кнопок фильтров (В сети, Все, Ожидание)
     for (int i = 0; i < 3; i++) {
-        RECT r = { startX, 10, startX + 80, 38 };
-        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        RECT r = { fx, 12, fx + 90, 44 };
+        if (PtInRect(&r, { x, y })) {
             currentFilter = (FriendsFilter)i;
-            InvalidateRect(hwnd, NULL, TRUE);
+            InvalidateRect(hwnd, NULL, FALSE); // Перерисовываем
             return;
         }
-        startX += 90;
+        fx += 100;
     }
 
-    // --- Кнопка "Добавить в друзья" ---
+    // 2. Проверка кнопки "Добавить друга"
     RECT rect;
     GetClientRect(hwnd, &rect);
-    RECT btnAdd = { rect.right - 170, 10, rect.right - 20, 38 };
-    if (x >= btnAdd.left && x <= btnAdd.right && y >= btnAdd.top && y <= btnAdd.bottom) {
-            AddFriendModalResult res = ShowAddFriendModal(hInstance, hwnd);
-            if (res.confirmed && !res.username.empty()) {
-                SendFriendRequest(res.username);
-            }
+    RECT btnAdd = { rect.right - 200, 12, rect.right - 20, 44 };
+
+    if (PtInRect(&btnAdd, { x, y })) {
+        auto res = ShowAddFriendModal(hInstance, hwnd);
+        if (res.confirmed) {
+            SendFriendRequest(res.username);
+        }
+        return;
     }
 
-    // --- Кнопки принять/отклонить заявки ---
+    // 3. Проверка кнопок в списке заявок (Accept/Reject)
     if (currentFilter == FriendsFilter::Pending) {
-        int yPos = 60;
-        int itemHeight = 40;
+        std::lock_guard<std::mutex> lock(pendingMutex);
+        int yPos = 72;
         for (size_t i = 0; i < pendingRequests.size(); i++) {
-            RECT btnAccept = { rect.right - 80, yPos + 5, rect.right - 45, yPos + itemHeight - 5 };
-            RECT btnReject = { rect.right - 40, yPos + 5, rect.right - 5, yPos + itemHeight - 5 };
+            // Кнопки привязаны к правому краю (rect.right)
+            RECT accept = { rect.right - 120, yPos + 12, rect.right - 70, yPos + 44 };
+            RECT reject = { rect.right - 60, yPos + 12, rect.right - 12, yPos + 44 };
 
-            if (x >= btnAccept.left && x <= btnAccept.right && y >= btnAccept.top && y <= btnAccept.bottom) {
+            if (PtInRect(&accept, { x, y })) {
                 AcceptFriendRequest(pendingRequests[i].username);
                 pendingRequests.erase(pendingRequests.begin() + i);
-                InvalidateRect(hwnd, NULL, TRUE);
+                InvalidateRect(hwnd, NULL, FALSE);
                 return;
             }
-
-            if (x >= btnReject.left && x <= btnReject.right && y >= btnReject.top && y <= btnReject.bottom) {
+            if (PtInRect(&reject, { x, y })) {
                 RejectFriendRequest(pendingRequests[i].username);
                 pendingRequests.erase(pendingRequests.begin() + i);
-                InvalidateRect(hwnd, NULL, TRUE);
+                InvalidateRect(hwnd, NULL, FALSE);
                 return;
             }
-
-            yPos += itemHeight + 5;
+            yPos += 68;
         }
     }
 }

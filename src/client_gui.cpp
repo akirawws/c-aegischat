@@ -59,7 +59,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int screenY = (GetSystemMetrics(SM_CYSCREEN) - connHeight) / 2;
 
     CreateAuthPage(hInstance, screenX, screenY, connWidth, connHeight);
-    CreateMainPage(hInstance, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600);
+    // УБРАТЬ: CreateMainPage(hInstance, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600);
+    // Главное окно будет создано позже, после успешной авторизации
     
     if (!hAuthWnd) {
         WriteLog("Critical Error: hAuthWnd is NULL. LastError: " + std::to_string(GetLastError()));

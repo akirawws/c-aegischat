@@ -21,97 +21,94 @@ std::mutex users_mutex;
 
 void HandleClient(SOCKET client_socket) {
     char buffer[512]; 
-    
+    std::string currentUsername = ""; // Храним ник этого клиента для удобства
+
     while (true) {
         ZeroMemory(buffer, sizeof(buffer));
         int bytesReceived = recv(client_socket, buffer, sizeof(buffer), 0);
 
         if (bytesReceived <= 0) {
-            std::cout << "[!] Клиент отключился." << std::endl;
+            std::cout << "[!] Клиент [" << (currentUsername.empty() ? "Неизвестно" : currentUsername) << "] отключился." << std::endl;
             break;
         }
 
         uint8_t packetType = *(uint8_t*)buffer;
 
+        // 1. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ
         if (packetType == PACKET_LOGIN || packetType == PACKET_REGISTER) {
             AuthPacket* packet = (AuthPacket*)buffer;
             ResponsePacket res = { PACKET_AUTH_RESPONSE, false, "" };
 
             if (packet->type == PACKET_REGISTER) {
-                std::cout << "[REG] Запрос от: " << packet->username << std::endl;
                 if (db.RegisterUser(packet->username, packet->email, packet->password)) {
                     res.success = true;
-                    strcpy(res.message, "Account created successfully!");
+                    strcpy(res.message, "Success!");
                 } else {
-                    strcpy(res.message, "User already exists or DB error.");
+                    strcpy(res.message, "Error!");
                 }
                 send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
             } 
             else if (packet->type == PACKET_LOGIN) {
-                std::cout << "[AUTH] Вход: " << packet->username << std::endl;
-                std::string currentUsername = packet->username; 
-
-                if (db.AuthenticateUser(currentUsername, packet->password)) {
+                if (db.AuthenticateUser(packet->username, packet->password)) {
+                    currentUsername = packet->username; 
                     res.success = true;
-                    strcpy(res.message, "Welcome to AEGIS.");
+                    strcpy(res.message, "Welcome!");
 
                     {
                         std::lock_guard<std::mutex> lock(users_mutex);
                         onlineUsers[currentUsername] = client_socket;
                     }
-
                     send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
 
-                    // Рассылка оффлайн-заявок
+                    // Оффлайн-заявки
                     std::vector<std::string> pending = db.GetPendingRequests(currentUsername);
                     for (const auto& senderName : pending) {
-                        FriendPacket fp;
-                        fp.type = PACKET_FRIEND_REQUEST;
-                        memset(fp.senderUsername, 0, 32);
-                        memset(fp.targetUsername, 0, 32);
+                        FriendPacket fp = { PACKET_FRIEND_REQUEST };
                         strncpy(fp.senderUsername, senderName.c_str(), 31);
                         strncpy(fp.targetUsername, currentUsername.c_str(), 31);
                         send(client_socket, (char*)&fp, sizeof(FriendPacket), 0);
                     }
                 } else {
-                    strcpy(res.message, "Invalid username or password.");
+                    strcpy(res.message, "Failed!");
                     send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
                 }
             }
         } 
+        // 2. НОВАЯ ЗАЯВКА В ДРУЗЬЯ
         else if (packetType == PACKET_FRIEND_REQUEST) {
             FriendPacket* fPkt = (FriendPacket*)buffer;
             if (db.AddFriendRequest(fPkt->senderUsername, fPkt->targetUsername)) {
-                std::cout << "[SUCCESS] Заявка сохранена в БД." << std::endl;
-
                 std::lock_guard<std::mutex> lock(users_mutex);
                 if (onlineUsers.count(fPkt->targetUsername)) {
-                    SOCKET targetSock = onlineUsers[fPkt->targetUsername];
-                    send(targetSock, (char*)fPkt, sizeof(FriendPacket), 0);
-                    std::cout << "[NET] Переслано юзеру " << fPkt->targetUsername << std::endl;
+                    send(onlineUsers[fPkt->targetUsername], (char*)fPkt, sizeof(FriendPacket), 0);
                 }
-            } else {
-                std::cerr << "[ERROR] Ошибка БД при добавлении друга." << std::endl;
             }
         }
+        // 3. ПРИНЯТЬ ИЛИ ОТКЛОНИТЬ ЗАЯВКУ (Добавлено!)
+        else if (packetType == PACKET_FRIEND_ACCEPT || packetType == PACKET_FRIEND_REJECT) {
+            // Важно: приведение (FriendActionPacket*)buffer должно быть обернуто в скобки
+            FriendActionPacket* aPkt = (FriendActionPacket*)buffer;
+            bool isAccept = (packetType == PACKET_FRIEND_ACCEPT);
+
+            if (db.HandleFriendAction(aPkt->targetUsername, currentUsername, isAccept)) {
+                std::cout << "[FRIEND] " << currentUsername 
+                        << (isAccept ? " принял " : " отклонил ") 
+                        << "заявку от " << aPkt->targetUsername << std::endl;
+            }
+        }
+        // 4. ОБЫЧНЫЙ ЧАТ
         else {
-            // Broadcast чат
             std::lock_guard<std::mutex> lock(clients_mutex);
             for (SOCKET s : clients) {
-                if (s != client_socket) {
-                    send(s, buffer, bytesReceived, 0);
-                }
+                if (s != client_socket) send(s, buffer, bytesReceived, 0);
             }
         }
     }
 
     // Очистка при выходе
-    {
+    if (!currentUsername.empty()) {
         std::lock_guard<std::mutex> lock(users_mutex);
-        for (auto it = onlineUsers.begin(); it != onlineUsers.end(); ) {
-            if (it->second == client_socket) it = onlineUsers.erase(it);
-            else ++it;
-        }
+        onlineUsers.erase(currentUsername);
     }
     
     std::lock_guard<std::mutex> lock(clients_mutex);

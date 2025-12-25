@@ -3,6 +3,7 @@
 #define PACKET_FRIEND_ACCEPT 5
 #define PACKET_FRIEND_REJECT 6
 
+
 #include <cstdint>
 #include <cstring>
 

@@ -69,6 +69,7 @@ void StartMessageSystem() {
 
 void ParseMessage(const std::string& msg) {
     Message m;
+    m.isMine = false;
     m.isUser = false;
     m.timeStr = GetCurrentTimeStr();
     
@@ -79,16 +80,15 @@ void ParseMessage(const std::string& msg) {
         if (end != std::string::npos) cleanMsg.erase(pos, end - pos + 1);
         else break;
     }
-    
+        
     size_t colonPos = cleanMsg.find(": ");
     if (colonPos != std::string::npos) {
         std::string prefix = cleanMsg.substr(0, colonPos);
         m.text = cleanMsg.substr(colonPos + 2);
-        
-        if (!userName.empty() && prefix.find(userName) != std::string::npos) {
-            m.isUser = true;
-        }
-        
+
+        // Ставим isMine, если сообщение от меня
+        m.isMine = (!userName.empty() && prefix.find(userName) != std::string::npos);
+
         size_t avatarEnd = prefix.find("]");
         if (avatarEnd != std::string::npos && avatarEnd + 1 < prefix.length()) {
             m.sender = prefix.substr(avatarEnd + 1);
@@ -100,7 +100,7 @@ void ParseMessage(const std::string& msg) {
     } else {
         m.text = cleanMsg;
         m.sender = "System";
-        m.isUser = false;
+        m.isMine = false;
     }
     
     messages.push_back(m);
@@ -196,26 +196,28 @@ void ReceiveMessages() {
             else if (packetType == PACKET_CHAT_MESSAGE) {
                 if (bytesReceived >= sizeof(ChatMessagePacket)) {
                     ChatMessagePacket* cPkt = (ChatMessagePacket*)buffer;
-                    
-                    Message m;
-                    m.text = cPkt->content;
-                    m.sender = cPkt->senderUsername;
-                    m.isMine = false;
-                    m.timeStr = GetCurrentTimeStr();
+                    std::string sender = cPkt->senderUsername;
 
-                    // 1. Сохраняем в общий архив
+                    // Игнорируем свои сообщения, которые уже локально добавлены
+                    if (sender == userName) continue;
+
+                    Message m;
+                            m.text = cPkt->content;
+                            m.sender = cPkt->senderUsername;
+                            m.isMine = (sender == userName);         
+                            m.timeStr = GetCurrentTimeStr();
+
                     chatHistories[m.sender].push_back(m);
-                    
-                    // 2. ВАЖНО: Если у нас открыт чат именно с этим человеком — добавляем в текущий список
+
                     if (g_uiState.activeChatUser == m.sender) {
                         messages.push_back(m);
                     }
-                    
-                    // 3. Принудительно перерисовываем
+
                     InvalidateRect(hMainWnd, NULL, FALSE);
                     if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
                 }
             }
+
             // 2. Пакет подтверждения дружбы (ЗАЯВКА ПРИНЯТА)
             else if (packetType == PACKET_FRIEND_ACCEPT) {
                 if (bytesReceived >= sizeof(FriendActionPacket)) {
@@ -300,30 +302,33 @@ void SendPrivateMessageFromUI() {
     char msgBuf[447]; 
     GetWindowTextA(hInputEdit, msgBuf, 447);
     std::string messageText = msgBuf;
+    if (messageText.empty()) return; // Не шлем пустые
 
     ChatMessagePacket pkt{};
     pkt.type = PACKET_CHAT_MESSAGE;
 
+    // Важно: копируем ваше актуальное имя пользователя
     strncpy(pkt.senderUsername, userName.c_str(), sizeof(pkt.senderUsername) - 1);
     strncpy(pkt.targetUsername, g_uiState.activeChatUser.c_str(), sizeof(pkt.targetUsername) - 1);
     strncpy(pkt.content, messageText.c_str(), sizeof(pkt.content) - 1);
-
 
     if (send(clientSocket, (char*)&pkt, sizeof(ChatMessagePacket), 0) != SOCKET_ERROR) { 
         Message m;
         m.text = messageText;
         m.sender = userName;
-        m.isMine = true;
-        m.timeStr = GetCurrentTimeStr();
-        
+        m.isMine = true;        // Явно ПРАВОЕ сообщение
+        m.timeStr = GetCurrentTimeStr(); // Используем ТОЛЬКО timeStr
+        m.time = m.timeStr;              // Для подстраховки заполним оба
+
         chatHistories[g_uiState.activeChatUser].push_back(m);
-        messages.push_back(m); // Это наполнит текущий экран
+        
+        // Добавляем в текущий экран, если мы в том же чате
+        messages.push_back(m); 
 
         SetWindowTextA(hInputEdit, "");
-        InvalidateRect(hMessageList, NULL, TRUE);
-        UpdateWindow(hMessageList); 
         
-        // Отладка в консоль клиента
-        printf("Sent to %s: %s\n", pkt.targetUsername, pkt.content);
+        // Обновляем оба окна
+        InvalidateRect(hMessageList, NULL, TRUE);
+        if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
     }
 }

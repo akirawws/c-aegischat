@@ -25,10 +25,14 @@ g++ -o Aegis.exe ^
     -IUtils ^
     -IPages ^
     -IComponents ^
-    -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -lbcrypt -mwindows -std=c++17
+    -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -lbcrypt ^
+    -mwindows -std=c++17 ^
+    -static -static-libgcc -static-libstdc++
 
 if %ERRORLEVEL% == 0 (
     echo Build successful!
+    echo Running Aegis...
+    start Aegis.exe
 ) else (
     echo Build failed!
     pause

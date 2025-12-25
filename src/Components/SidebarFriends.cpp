@@ -6,11 +6,11 @@
 #include <algorithm>
 
 // Внешние функции
-extern void ShowChatUI(bool show); 
+extern void ShowChatUI(bool show);
 
-// Глобальные переменные модуля с защитой
+// Глобальные переменные модуля
 static std::vector<DMUser> dmUsers;
-static std::mutex dmMutex; // Для защиты вектора при работе с сетью
+static std::mutex dmMutex; // Защита при работе с сетью
 static int hoveredIndex = -1;
 
 #define COLOR_BG_DM         RGB(47, 49, 54)
@@ -19,8 +19,7 @@ static int hoveredIndex = -1;
 #define COLOR_TEXT          RGB(220, 221, 222)
 #define COLOR_MUTED         RGB(150, 152, 157)
 
-const int SIDEBAR_ICONS = 72;
-const int SIDEBAR_DM    = 240;
+const int SIDEBAR_WIDTH = 240;
 
 static void FillRectSafe(HDC hdc, RECT* r, COLORREF color) {
     HBRUSH brush = CreateSolidBrush(color);
@@ -28,14 +27,17 @@ static void FillRectSafe(HDC hdc, RECT* r, COLORREF color) {
     DeleteObject(brush);
 }
 
+// Устанавливаем текущих пользователей
 void SetDMUsers(const std::vector<DMUser>& users) {
     std::lock_guard<std::mutex> lock(dmMutex);
     dmUsers = users;
 }
 
+// Рисуем сайдбар друзей
 void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
-    std::lock_guard<std::mutex> lock(dmMutex); // Блокируем на время отрисовки
+    std::lock_guard<std::mutex> lock(dmMutex);
 
+    // Фон сайдбара
     RECT bg = { x, y, x + w, y + h };
     FillRectSafe(hdc, &bg, COLOR_BG_DM);
 
@@ -46,14 +48,13 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
     SetBkMode(hdc, TRANSPARENT);
     int cy = y + 12;
 
-    // --- Кнопки управления ---
+    // --- Верхние кнопки ---
     const wchar_t* buttons[] = { L"Друзья", L"Запросы общения" };
     for (int i = 0; i < 2; i++) {
         RECT r = { x + 8, cy, x + w - 8, cy + 36 };
-        bool active = false;
-        if (i == 0) active = (g_uiState.currentPage == AppPage::Friends);
-        if (i == 1) active = (g_uiState.currentPage == AppPage::FriendRequests);
-        
+        bool active = (i == 0 && g_uiState.currentPage == AppPage::Friends) ||
+                      (i == 1 && g_uiState.currentPage == AppPage::FriendRequests);
+
         if (active) {
             FillRectSafe(hdc, &r, COLOR_ITEM_HOVER);
             SetTextColor(hdc, RGB(255, 255, 255));
@@ -73,7 +74,7 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
     FillRectSafe(hdc, &sep, RGB(60, 63, 69));
     cy += 24;
 
-    // Заголовок
+    // Заголовок "Личные чаты"
     SelectObject(hdc, fontTitle);
     RECT titleRect = { x + 12, cy, x + w, cy + 24 };
     SetTextColor(hdc, COLOR_MUTED);
@@ -84,7 +85,7 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
     SelectObject(hdc, fontItem);
     for (size_t i = 0; i < dmUsers.size(); i++) {
         RECT r = { x + 8, cy, x + w - 8, cy + 36 };
-        bool active = (g_uiState.currentPage == AppPage::Messages && 
+        bool active = (g_uiState.currentPage == AppPage::Messages &&
                        g_uiState.activeChatUser == dmUsers[i].username);
 
         if (active || hoveredIndex == (int)i + 2)
@@ -100,11 +101,13 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
     DeleteObject(fontItem);
 }
 
+// Обработка клика по сайдбару
 void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     std::lock_guard<std::mutex> lock(dmMutex);
     int cy = 12;
 
-    if (y >= cy && y <= cy + 36) { 
+    // Кнопка "Друзья"
+    if (y >= cy && y <= cy + 36) {
         g_uiState.currentPage = AppPage::Friends;
         ShowChatUI(false);
         InvalidateRect(hwnd, NULL, FALSE);
@@ -112,7 +115,8 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     }
     cy += 40;
 
-    if (y >= cy && y <= cy + 36) { 
+    // Кнопка "Запросы общения"
+    if (y >= cy && y <= cy + 36) {
         g_uiState.currentPage = AppPage::FriendRequests;
         ShowChatUI(false);
         InvalidateRect(hwnd, NULL, FALSE);
@@ -120,6 +124,7 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     }
     cy += 64;
 
+    // Список пользователей
     for (auto& u : dmUsers) {
         if (y >= cy && y <= cy + 36) {
             g_uiState.currentPage = AppPage::Messages;
@@ -132,25 +137,27 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     }
 }
 
+// Добавление нового пользователя в список
 void AddUserToDMList(HWND hwnd, const std::string& username) {
     std::lock_guard<std::mutex> lock(dmMutex);
     
     auto it = std::find_if(dmUsers.begin(), dmUsers.end(), [&](const DMUser& u) {
         return u.username == username;
     });
-    if (it != dmUsers.end()) return; 
+    if (it != dmUsers.end()) return;
 
     DMUser newUser;
     newUser.username = username;
-    newUser.id = "room_id"; 
+    newUser.id = "room_id"; // Можно заменить на реальный ID
     dmUsers.push_back(newUser);
 
     if (hwnd) {
-        RECT r = { 72, 0, 72 + 240, 2000 };
+        RECT r = { 0, 0, SIDEBAR_WIDTH, 2000 };
         InvalidateRect(hwnd, &r, FALSE);
     }
 }
 
+// Обновление всего списка друзей
 void UpdateAllFriends(const std::vector<DMUser>& friends) {
     std::lock_guard<std::mutex> lock(dmMutex);
     dmUsers = friends;

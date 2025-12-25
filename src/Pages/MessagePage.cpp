@@ -9,7 +9,7 @@
 
 
 void DrawMessagePage(HDC hdc, int x, int y, int w, int h, const std::vector<Message>& messages) {
-    // Чистый фон без мерцания
+    // 1. Очистка фона
     RECT bg = { x, y, x + w, y + h };
     HBRUSH hBrBg = CreateSolidBrush(COLOR_BG);
     FillRect(hdc, &bg, hBrBg);
@@ -18,41 +18,46 @@ void DrawMessagePage(HDC hdc, int x, int y, int w, int h, const std::vector<Mess
     HFONT font = CreateAppFont(15, FW_NORMAL);
     HFONT fontTime = CreateAppFont(11, FW_NORMAL);
     
-    int msgY = y + 20; // Начальный отступ сверху
-    int maxBubbleWidth = w * 0.7; // Сообщение занимает максимум 70% ширины
+    int msgY = y + 20; 
+    int maxBubbleWidth = (int)(w * 0.7); // 70% от ширины окна
 
     for (const auto& msg : messages) {
-        // Вычисляем размер текста
+        // 2. Расчет размера текста
         RECT textCalc = { 0, 0, maxBubbleWidth - 30, 0 };
         SelectObject(hdc, font);
         DrawTextA(hdc, msg.text.c_str(), -1, &textCalc, DT_CALCRECT | DT_WORDBREAK);
 
         int bubbleW = textCalc.right + 30;
-        int bubbleH = textCalc.bottom + 25; // Запас под время
+        int bubbleH = textCalc.bottom + 25; 
 
+        // 3. ПОЗИЦИОНИРОВАНИЕ (Критический узел)
         RECT bubble;
         if (msg.isMine) {
-            bubble = { x + w - bubbleW - 20, msgY, x + w - 20, msgY + bubbleH };
+            bubble.right = x + w - 20;
+            bubble.left = bubble.right - bubbleW;
         } else {
-            bubble = { x + 20, msgY, x + 20 + bubbleW, msgY + bubbleH };
+            bubble.left = x + 20;
+            bubble.right = bubble.left + bubbleW;
         }
+        bubble.top = msgY;
+        bubble.bottom = msgY + bubbleH;
 
-        // Рисуем тень или свечение (опционально) и само облако
+        // 4. Отрисовка
         DrawRoundedRect(hdc, bubble, msg.isMine ? COLOR_MINE : COLOR_OTHER, 12);
 
-        // Текст сообщения
+        // Текст
         RECT textPos = { bubble.left + 15, bubble.top + 10, bubble.right - 15, bubble.bottom - 10 };
         SetTextColor(hdc, COLOR_TEXT);
         SetBkMode(hdc, TRANSPARENT);
         DrawTextA(hdc, msg.text.c_str(), -1, &textPos, DT_WORDBREAK);
 
-        // Время в углу
+        // Время (всегда внутри баббла в углу)
         SelectObject(hdc, fontTime);
         SetTextColor(hdc, COLOR_TIME);
-        std::string time = msg.time; // Используем время из структуры
-        TextOutA(hdc, bubble.right - 45, bubble.bottom - 18, time.c_str(), time.length());
+        int timeX = bubble.right - 50;
+        TextOutA(hdc, timeX, bubble.bottom - 18, msg.timeStr.c_str(), (int)msg.timeStr.length());
 
-        msgY += bubbleH + 10; // Расстояние между сообщениями
+        msgY += bubbleH + 10; // Смещение для следующего сообщения
     }
 
     DeleteObject(font);

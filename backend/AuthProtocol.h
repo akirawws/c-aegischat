@@ -14,7 +14,8 @@ enum PacketType : uint8_t {
     PACKET_FRIEND_REJECT = 6,
     PACKET_ROOM_LIST = 7,      
     PACKET_CHAT_MESSAGE = 8,
-    PACKET_USER_STATUS = 9  
+    PACKET_USER_STATUS = 9,
+    PACKET_CHAT_HISTORY = 10
 };
 
 struct AuthPacket {
@@ -47,17 +48,30 @@ struct RoomPacket {
     char username[64]; 
     uint8_t onlineStatus;
 };
-
 struct ChatMessagePacket {
     uint8_t type;
     char senderUsername[64];   
     char targetUsername[64];  
-    char content[384];       
+    char content[512]; 
 };
+
 struct UserStatusPacket {
     uint8_t type;
     char username[64];
     uint8_t onlineStatus;    
+};
+
+struct HistoryRequestPacket {
+    uint8_t type;
+    char targetUsername[64];
+    int offset; 
+};
+struct ChatHistoryEntryPacket {
+    uint8_t type;
+    char senderUsername[64];
+    char content[512];
+    char timestamp[32]; 
+    bool isLast;      
 };
 
 #pragma pack(pop)

@@ -6,6 +6,13 @@
 #include <map>
 #include <vector> 
 
+struct Message {
+    std::string sender;
+    std::string text;
+    std::string timeStr;
+    bool isMine;
+};
+
 class Database {
 public:
     Database();
@@ -21,6 +28,8 @@ public:
     bool AcceptFriendAndCreateRoom(const std::string& sender, const std::string& target);
     std::vector<std::string> GetAcceptedFriends(const std::string& username);
     bool SaveMessage(const std::string& sender, const std::string& target, const std::string& text);
+    std::vector<Message> GetChatHistory(const std::string& user1, const std::string& user2, int offset, int limit);
+
 private:
     PGconn* conn; 
     std::map<std::string, std::string> LoadEnv(const std::string& filename);

@@ -261,19 +261,58 @@ std::vector<std::string> Database::GetAcceptedFriends(const std::string& usernam
 bool Database::SaveMessage(const std::string& sender, const std::string& target, const std::string& text) {
     if (!conn) return false;
     const char* params[3] = { sender.c_str(), target.c_str(), text.c_str() };
-    
-    // Запрос находит нужный room_id и вставляет сообщение
     std::string query = 
+        "WITH users_ids AS ("
+        "  SELECT "
+        "    (SELECT id FROM users WHERE username = $1) as sid,"
+        "    (SELECT id FROM users WHERE username = $2) as tid"
+        "),"
+        "target_room AS ("
+        "  INSERT INTO dm_rooms (user_1, user_2)"
+        "  SELECT LEAST(sid, tid), GREATEST(sid, tid) FROM users_ids"
+        "  ON CONFLICT (user_1, user_2) DO UPDATE SET user_1 = EXCLUDED.user_1 "
+        "  RETURNING id"
+        ") "
         "INSERT INTO messages (room_id, sender_id, content) "
-        "SELECT r.id, u.id, $3 "
-        "FROM dm_rooms r "
-        "JOIN users u ON u.username = $1 "
-        "WHERE (r.user_1 = u.id OR r.user_2 = u.id) "
-        "AND (r.user_1 = (SELECT id FROM users WHERE username = $2) "
-        "OR r.user_2 = (SELECT id FROM users WHERE username = $2))";
+        "SELECT (SELECT id FROM target_room), sid, $3 FROM users_ids;";
 
     PGresult* res = PQexecParams(conn, query.c_str(), 3, NULL, params, NULL, NULL, 0);
-    bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "[DB] Ошибка сохранения сообщения/создания комнаты: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return false;
+    }
+
     PQclear(res);
-    return success;
+    return true;
+}
+
+std::vector<Message> Database::GetChatHistory(const std::string& u1, const std::string& u2, int offset, int limit) {
+    std::vector<Message> history;
+    const char* params[4] = { u1.c_str(), u2.c_str(), std::to_string(offset).c_str(), std::to_string(limit).c_str() };
+
+    // Выбираем сообщения из нужной комнаты с лимитом и смещением
+    std::string query = 
+        "SELECT u.username, m.content, to_char(m.created_at, 'HH24:MI') "
+        "FROM messages m "
+        "JOIN users u ON m.sender_id = u.id "
+        "JOIN dm_rooms r ON m.room_id = r.id "
+        "WHERE (r.user_1 = (SELECT id FROM users WHERE username = $1) AND r.user_2 = (SELECT id FROM users WHERE username = $2)) "
+        "OR (r.user_1 = (SELECT id FROM users WHERE username = $2) AND r.user_2 = (SELECT id FROM users WHERE username = $1)) "
+        "ORDER BY m.created_at DESC "
+        "LIMIT $4 OFFSET $3";
+
+    PGresult* res = PQexecParams(conn, query.c_str(), 4, NULL, params, NULL, NULL, 0);
+    if (PQresultStatus(res) == PGRES_TUPLES_OK) {
+        for (int i = 0; i < PQntuples(res); i++) {
+            Message m;
+            m.sender = PQgetvalue(res, i, 0);
+            m.text = PQgetvalue(res, i, 1);
+            m.timeStr = PQgetvalue(res, i, 2);
+            history.push_back(m);
+        }
+    }
+    PQclear(res);
+    return history; // Сообщения вернутся от новых к старым
 }

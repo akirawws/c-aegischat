@@ -355,3 +355,12 @@
 [22:33:46] Step 5: Connection established successfully.
 [22:33:46] Receive thread started.
 [22:33:49] Receive thread exiting.
+[10:20:09] --- APP START ---
+[10:20:09] Registering class: ConnectWindow
+[10:20:09] Class ConnectWindow registered successfully.
+[10:20:09] Registering class: MainWindow
+[10:20:09] Class MainWindow registered successfully.
+[10:20:09] Registering class: SidebarWindow
+[10:20:09] Class SidebarWindow registered successfully.
+[10:20:09] Registering class: MessageListWindow
+[10:20:09] Class MessageListWindow registered successfully.

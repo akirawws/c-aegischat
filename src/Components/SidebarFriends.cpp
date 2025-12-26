@@ -6,12 +6,21 @@
 #include <algorithm>
 #include <string>
 #include <gdiplus.h>
+#include <Utils/Utils.h>
+#include <map>
+#include <string>
 
 #pragma comment(lib, "gdiplus.lib")
 
 using namespace Gdiplus;
-
+extern bool g_isLoadingHistory; // Удалите "= false", добавьте extern
+int g_historyOffset = 0;
+extern int scrollPos;
 extern void ShowChatUI(bool show);
+extern void RequestChatHistory(const std::string& target, int offset);
+extern std::vector<Message> messages; // Ваш глобальный вектор сообщений на экране
+extern HWND hMessageList;             // Хендл окна списка сообщений
+extern std::map<std::string, std::vector<Message>> chatHistories;
 
 static std::vector<DMUser> dmUsers;
 static std::mutex dmMutex; 
@@ -176,13 +185,22 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
 
     // Список пользователей
     for (auto& u : dmUsers) {
-        if (y >= cy && y <= cy + ITEM_HEIGHT) {
-            g_uiState.currentPage = AppPage::Messages;
-            g_uiState.activeChatUser = u.username;
-            ShowChatUI(true);
-            InvalidateRect(hwnd, NULL, FALSE);
-            return;
-        }
+            if (y >= cy && y <= cy + ITEM_HEIGHT) {
+                if (g_uiState.activeChatUser == u.username) return;
+                g_uiState.activeChatUser = u.username;
+                g_uiState.currentPage = AppPage::Messages;
+                messages.clear();
+                if (chatHistories.count(u.username)) {
+                    messages = chatHistories[u.username];
+                }
+                g_historyOffset = 0;
+                g_isLoadingHistory = false; 
+                RequestChatHistory(u.username, 0); 
+                ShowChatUI(true);
+                scrollPos = 0; 
+                InvalidateRect(hwnd, NULL, FALSE);
+                return;
+            }
         cy += ITEM_HEIGHT + ITEM_SPACING;
     }
 }

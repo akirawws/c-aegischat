@@ -179,15 +179,22 @@ void ReceiveMessages() {
                 memcpy(name, rPkt.username, 64);
                 AddUserToDMList(hMainWnd, std::string(name), (rPkt.onlineStatus == 1));
             }
-        }
+                }
         else if (packetType == PACKET_USER_STATUS) {
             UserStatusPacket sPkt;
             sPkt.type = packetType;
             if (ReceiveExact((char*)&sPkt + 1, sizeof(UserStatusPacket) - 1)) {
                 char targetName[65] = {0};
                 memcpy(targetName, sPkt.username, 64);
+                
+                // Обновляем статус в памяти
                 UpdateUserOnlineStatus(std::string(targetName), (sPkt.onlineStatus == 1));
-                if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+                
+                // ФОРСИРУЕМ ПЕРЕРИСОВКУ ВСЕГО ОКНА
+                if (hMainWnd) {
+                    InvalidateRect(hMainWnd, NULL, FALSE);
+                    UpdateWindow(hMainWnd); // Немедленно вызывает WM_PAINT
+                }
             }
         }
         if (packetType == PACKET_CHAT_MESSAGE) {

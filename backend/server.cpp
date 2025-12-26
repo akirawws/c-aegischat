@@ -134,57 +134,32 @@ void HandleClient(SOCKET client_socket) {
             }
         }
         else if (packetType == PACKET_CHAT_HISTORY) {
-            HistoryRequestPacket req{};
-            req.type = packetType;
+            HistoryRequestPacket* req = (HistoryRequestPacket*)buffer;
+            std::cout << "[DEBUG] History request from " << currentUsername 
+                    << " for " << req->targetUsername << " offset " << req->offset << std::endl;
 
-            // Дочитываем пакет полностью (кроме первого байта type)
-            if (!ReceiveExact(
-                    client_socket,
-                    (char*)&req + 1,
-                    sizeof(HistoryRequestPacket) - 1)) {
-                break;
-            }
-
-            std::cout << "[DEBUG] History request from "
-                    << currentUsername
-                    << " for " << req.targetUsername
-                    << " offset " << req.offset << std::endl;
-
-            std::vector<Message> history =
-                db.GetChatHistory(currentUsername, req.targetUsername, req.offset, 50);
-
+            std::vector<Message> history = db.GetChatHistory(currentUsername, req->targetUsername, req->offset, 50);
             std::cout << "[DEBUG] Found messages: " << history.size() << std::endl;
-
-            // Если истории нет — отправляем пустой пакет с isLast=true
+            // Если история пуста, нужно отправить хотя бы один пакет с isLast=true, 
+            // чтобы клиент убрал экран загрузки
             if (history.empty()) {
-                ChatHistoryEntryPacket emptyPkt{};
-                emptyPkt.type = PACKET_CHAT_HISTORY;
+                ChatHistoryEntryPacket emptyPkt = { PACKET_CHAT_HISTORY };
                 emptyPkt.isLast = true;
-
-                strcpy(emptyPkt.senderUsername, "system");
-                emptyPkt.content[0] = '\0';
-                emptyPkt.timestamp[0] = '\0';
-
-                send(client_socket, (char*)&emptyPkt, sizeof(emptyPkt), 0);
-            }
-            else {
-                // Отправляем от старых к новым
+                send(client_socket, (char*)&emptyPkt, sizeof(ChatHistoryEntryPacket), 0);
+            } else {
+                // Отправляем сообщения от старых к новым (БД возвращает DESC, поэтому идем с конца вектора)
                 for (int i = (int)history.size() - 1; i >= 0; --i) {
-                    ChatHistoryEntryPacket hPkt{};
-                    hPkt.type = PACKET_CHAT_HISTORY;
-
+                    ChatHistoryEntryPacket hPkt = { PACKET_CHAT_HISTORY };
+                    
                     strncpy(hPkt.senderUsername, history[i].sender.c_str(), 63);
                     strncpy(hPkt.content, history[i].text.c_str(), 511);
                     strncpy(hPkt.timestamp, history[i].timeStr.c_str(), 31);
-
-                    hPkt.senderUsername[63] = '\0';
-                    hPkt.content[511] = '\0';
-                    hPkt.timestamp[31] = '\0';
-
-                    hPkt.isLast = (i == 0);
-
-                    send(client_socket, (char*)&hPkt, sizeof(hPkt), 0);
-
+                    
+                    hPkt.isLast = (i == 0); // Последнее сообщение в цикле — флаг True
+                    
+                    send(client_socket, (char*)&hPkt, sizeof(ChatHistoryEntryPacket), 0);
+                    
+                    // Небольшая пауза, чтобы не забить буфер сокета при большой истории
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
             }
@@ -215,16 +190,13 @@ void HandleClient(SOCKET client_socket) {
                 }
             }
         }
-    } // Конец while(true)
-
-    // Очистка при отключении
+    } 
     if (!currentUsername.empty()) {
+        std::cout << "[SERVER] User disconnecting: " << currentUsername << std::endl;
         BroadcastStatusToFriends(currentUsername, 0);
         std::lock_guard<std::mutex> lock(users_mutex);
         onlineUsers.erase(currentUsername);
-        std::cout << "[SERVER] User logout: " << currentUsername << std::endl;
     }
-
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
         clients.erase(std::remove(clients.begin(), clients.end(), client_socket), clients.end());

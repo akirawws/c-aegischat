@@ -25,8 +25,17 @@ g++ -o Aegis.exe ^
     -IUtils ^
     -IPages ^
     -IComponents ^
-    -lws2_32 -lgdi32 -lcomctl32 -lmsimg32 -lbcrypt ^
-    -mwindows -std=c++17 ^
+    -std=c++17 ^
+    -D_WIN32_WINNT=0x0601 ^
+    -lws2_32 ^
+    -lgdiplus ^
+    -lgdi32 ^
+    -lcomctl32 ^
+    -lmsimg32 ^
+    -lbcrypt ^
+    -lole32 ^
+    -luuid ^
+    -mwindows ^
     -static -static-libgcc -static-libstdc++
 
 if %ERRORLEVEL% == 0 (

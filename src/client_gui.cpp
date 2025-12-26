@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cstring>
 #include <richedit.h>
+#include <gdiplus.h>
 
+#pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "Msimg32.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -44,33 +46,52 @@ void RegisterWindowClass(const char* className, WNDPROC proc) {
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     WriteLog("--- APP START ---"); 
-    WSADATA wsaData;
-    LoadLibraryA("Msftedit.dll");
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return 1;
 
+    // 1. Инициализация Winsock (ОДИН РАЗ)
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        WriteLog("Failed to startup Winsock");
+        return 1;
+    }
+
+    // 2. Инициализация GDI+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    // 3. Загрузка библиотек и регистрация классов
+    LoadLibraryA("Msftedit.dll");
     RegisterWindowClass("AuthWindow", AuthWndProc);
     RegisterWindowClass("MainWindow", MainWndProc);
     RegisterWindowClass("SidebarWindow", SidebarWndProc);
     RegisterWindowClass("MessageListWindow", MessageListWndProc);
     
+    // 4. Расчет координат экрана
     int connWidth = 420;
     int connHeight = 450; 
     int screenX = (GetSystemMetrics(SM_CXSCREEN) - connWidth) / 2;
     int screenY = (GetSystemMetrics(SM_CYSCREEN) - connHeight) / 2;
 
+    // 5. Создание страницы авторизации
     CreateAuthPage(hInstance, screenX, screenY, connWidth, connHeight);
-    // УБРАТЬ: CreateMainPage(hInstance, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600);
-    // Главное окно будет создано позже, после успешной авторизации
     
     if (!hAuthWnd) {
         WriteLog("Critical Error: hAuthWnd is NULL. LastError: " + std::to_string(GetLastError()));
+        Gdiplus::GdiplusShutdown(gdiplusToken);
+        WSACleanup();
         return 0;
     }
 
     ShowWindow(hAuthWnd, nCmdShow);
     UpdateWindow(hAuthWnd);
     
+    // 6. ОСНОВНОЙ ЦИКЛ СООБЩЕНИЙ (Программа работает здесь)
     ProcessMessageLoop();
+
+    // 7. ОЧИСТКА РЕСУРСОВ (Вызывается только при закрытии приложения)
+    Gdiplus::GdiplusShutdown(gdiplusToken);
     WSACleanup();
+    
+    WriteLog("--- APP END ---");
     return 0;
 }

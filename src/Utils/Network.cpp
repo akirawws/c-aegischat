@@ -182,16 +182,33 @@ void ReceiveMessages() {
                     if (hMainWnd) InvalidateRect(hMainWnd, NULL, TRUE);
                 }
             }
-            else if (packetType == PACKET_ROOM_LIST) {
-                if (bytesReceived >= sizeof(RoomPacket)) {
-                    RoomPacket* rPkt = (RoomPacket*)buffer;
-                    char name[33] = {0};
-                    memcpy(name, rPkt->username, 32);
-                    
-                    // Добавляем в список без принудительной перерисовки каждого элемента
-                    AddUserToDMList(hMainWnd, std::string(name));
+        else if (packetType == PACKET_ROOM_LIST) {
+            if (bytesReceived >= sizeof(RoomPacket)) {
+                RoomPacket* rPkt = (RoomPacket*)buffer;
+                char name[65] = {0}; 
+                memcpy(name, rPkt->username, 64);
+                
+                bool status = (rPkt->onlineStatus == 1); 
+
+                AddUserToDMList(hMainWnd, std::string(name), status);
+            }
+        }
+        else if (packetType == PACKET_USER_STATUS) {
+            if (bytesReceived >= sizeof(UserStatusPacket)) {
+                UserStatusPacket* sPkt = (UserStatusPacket*)buffer;
+                
+                char targetName[65] = {0};
+                memcpy(targetName, sPkt->username, 64);
+                
+                bool isOnline = (sPkt->onlineStatus == 1);
+
+                UpdateUserOnlineStatus(std::string(targetName), isOnline);
+
+                if (hMainWnd) {
+                    InvalidateRect(hMainWnd, NULL, FALSE);
                 }
             }
+        }
 
             else if (packetType == PACKET_CHAT_MESSAGE) {
                 if (bytesReceived >= sizeof(ChatMessagePacket)) {

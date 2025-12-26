@@ -4,161 +4,215 @@
 #include <vector>
 #include <mutex>
 #include <algorithm>
+#include <string>
+#include <gdiplus.h>
 
-// Внешние функции
+#pragma comment(lib, "gdiplus.lib")
+
+using namespace Gdiplus;
+
 extern void ShowChatUI(bool show);
 
-// Глобальные переменные модуля
 static std::vector<DMUser> dmUsers;
-static std::mutex dmMutex; // Защита при работе с сетью
+static std::mutex dmMutex; 
 static int hoveredIndex = -1;
 
-#define COLOR_BG_DM         RGB(47, 49, 54)
-#define COLOR_ITEM_HOVER    RGB(64, 68, 75)
-#define COLOR_ITEM_ACTIVE   RGB(88, 101, 242)
-#define COLOR_TEXT          RGB(220, 221, 222)
-#define COLOR_MUTED         RGB(150, 152, 157)
+// Константы размеров для точного совпадения отрисовки и кликов
+const int ITEM_HEIGHT = 44;
+const int ITEM_SPACING = 4;
+const int TOP_OFFSET = 15;
+const int BUTTON_HEIGHT = 42;
+const int BUTTON_SPACING = 4;
 
-const int SIDEBAR_WIDTH = 240;
+// Цвета
+#define COLOR_BG_DM          Color(255, 43, 45, 49)
+#define COLOR_ITEM_HOVER     Color(255, 53, 55, 60)
+#define COLOR_ITEM_ACTIVE    Color(255, 63, 65, 71)
+#define COLOR_TEXT_BRIGHT    Color(255, 255, 255, 255)
+#define COLOR_TEXT_NORMAL    Color(255, 148, 155, 164)
+#define COLOR_STATUS_ONLINE  Color(255, 35, 165, 90)
+#define COLOR_STATUS_OFFLINE Color(255, 128, 132, 142)
 
-static void FillRectSafe(HDC hdc, RECT* r, COLORREF color) {
-    HBRUSH brush = CreateSolidBrush(color);
-    FillRect(hdc, r, brush);
-    DeleteObject(brush);
+// Красивая плавная отрисовка аватара и статуса через GDI+
+static void DrawSmoothAvatar(Graphics& g, float x, float y, const std::string& name, bool online) {
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+
+    float size = 32.0f;
+    RectF rect(x, y, size, size);
+
+    // 1. Фон аватара
+    SolidBrush avatarBrush(Color(255, 80, 84, 92));
+    g.FillEllipse(&avatarBrush, rect);
+
+    // 2. Буква (текст)
+    std::wstring letter = L"";
+    if (!name.empty()) letter += (wchar_t)toupper(name[0]);
+
+    FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font font(&fontFamily, 12, FontStyleBold, UnitPoint);
+    SolidBrush textBrush(Color(255, 220, 221, 222));
+    
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    format.SetLineAlignment(StringAlignmentCenter);
+    g.DrawString(letter.c_str(), -1, &font, rect, &format, &textBrush);
+
+    // 3. Индикатор статуса
+    float sSize = 12.0f;
+    float sX = x + size - sSize + 2;
+    float sY = y + size - sSize + 2;
+    
+    // Обводка статуса (под цвет фона, чтобы выглядело как вырез)
+    SolidBrush bgStroke(COLOR_BG_DM);
+    g.FillEllipse(&bgStroke, sX - 2, sY - 2, sSize + 4, sSize + 4);
+
+    // Сам кружок статуса
+    SolidBrush statusBrush(online ? COLOR_STATUS_ONLINE : COLOR_STATUS_OFFLINE);
+    g.FillEllipse(&statusBrush, sX, sY, sSize, sSize);
 }
 
-// Устанавливаем текущих пользователей
-void SetDMUsers(const std::vector<DMUser>& users) {
-    std::lock_guard<std::mutex> lock(dmMutex);
-    dmUsers = users;
-}
-
-// Рисуем сайдбар друзей
-void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
-    std::lock_guard<std::mutex> lock(dmMutex);
-
-    // Фон сайдбара
-    RECT bg = { x, y, x + w, y + h };
-    FillRectSafe(hdc, &bg, COLOR_BG_DM);
-
-    HFONT fontTitle = CreateAppFont(12, FW_BOLD);
-    HFONT fontItem  = CreateAppFont(13, FW_NORMAL);
-    HFONT oldFont   = (HFONT)SelectObject(hdc, fontItem);
-
-    SetBkMode(hdc, TRANSPARENT);
-    int cy = y + 12;
-
-    // --- Верхние кнопки ---
-    const wchar_t* buttons[] = { L"Друзья", L"Запросы общения" };
-    for (int i = 0; i < 2; i++) {
-        RECT r = { x + 8, cy, x + w - 8, cy + 36 };
-        bool active = (i == 0 && g_uiState.currentPage == AppPage::Friends) ||
-                      (i == 1 && g_uiState.currentPage == AppPage::FriendRequests);
-
-        if (active) {
-            FillRectSafe(hdc, &r, COLOR_ITEM_HOVER);
-            SetTextColor(hdc, RGB(255, 255, 255));
-        } else if (hoveredIndex == i) {
-            FillRectSafe(hdc, &r, COLOR_ITEM_HOVER);
-            SetTextColor(hdc, COLOR_TEXT);
-        } else {
-            SetTextColor(hdc, COLOR_MUTED);
-        }
-
-        DrawTextW(hdc, buttons[i], -1, &r, DT_VCENTER | DT_SINGLELINE | DT_LEFT | DT_NOPREFIX);
-        cy += 40;
+static void DrawDiscordButton(Graphics& g, RectF rect, const std::wstring& text, bool active, bool hovered) {
+    if (active || hovered) {
+        SolidBrush b(active ? COLOR_ITEM_ACTIVE : COLOR_ITEM_HOVER);
+        g.FillRectangle(&b, rect); // В идеале здесь GraphicsPath для RoundRect, но для краткости Rect
     }
 
-    // Разделитель
-    RECT sep = { x + 12, cy + 8, x + w - 12, cy + 9 };
-    FillRectSafe(hdc, &sep, RGB(60, 63, 69));
-    cy += 24;
+    FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font font(&fontFamily, 11, active ? FontStyleBold : FontStyleRegular, UnitPoint);
+    SolidBrush textBrush(active ? COLOR_TEXT_BRIGHT : COLOR_TEXT_NORMAL);
+    
+    RectF textRect(rect.X + 15, rect.Y, rect.Width - 15, rect.Height);
+    StringFormat format;
+    format.SetLineAlignment(StringAlignmentCenter);
+    g.DrawString(text.c_str(), -1, &font, textRect, &format, &textBrush);
+}
 
-    // Заголовок "Личные чаты"
-    SelectObject(hdc, fontTitle);
-    RECT titleRect = { x + 12, cy, x + w, cy + 24 };
-    SetTextColor(hdc, COLOR_MUTED);
-    DrawTextW(hdc, L"ЛИЧНЫЕ ЧАТЫ", -1, &titleRect, DT_LEFT | DT_VCENTER);
-    cy += 28;
+void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
+    std::lock_guard<std::mutex> lock(dmMutex);
+    
+    Graphics g(hdc);
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+
+    // Очистка фона
+    SolidBrush bgBrush(COLOR_BG_DM);
+    g.FillRectangle(&bgBrush, (REAL)x, (REAL)y, (REAL)w, (REAL)h);
+
+    int cy = y + TOP_OFFSET;
+
+    // --- Кнопки ---
+    const wchar_t* buttons[] = { L"Друзья", L"Запросы общения" };
+    for (int i = 0; i < 2; i++) {
+        RectF r((REAL)x + 8, (REAL)cy, (REAL)w - 16, (REAL)BUTTON_HEIGHT);
+        bool active = (i == 0 && g_uiState.currentPage == AppPage::Friends) ||
+                      (i == 1 && g_uiState.currentPage == AppPage::FriendRequests);
+        
+        DrawDiscordButton(g, r, buttons[i], active, (hoveredIndex == i));
+        cy += BUTTON_HEIGHT + BUTTON_SPACING;
+    }
+
+    cy += 10; // Отступ перед заголовком
+
+    // Заголовок
+    FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font titleFont(&fontFamily, 9, FontStyleBold, UnitPoint);
+    SolidBrush titleBrush(COLOR_TEXT_NORMAL);
+    g.DrawString(L"ЛИЧНЫЕ ЧАТЫ", -1, &titleFont, PointF((REAL)x + 18, (REAL)cy), &titleBrush);
+    
+    cy += 25; // Высота заголовка
 
     // --- Список пользователей ---
-    SelectObject(hdc, fontItem);
     for (size_t i = 0; i < dmUsers.size(); i++) {
-        RECT r = { x + 8, cy, x + w - 8, cy + 36 };
+        RectF r((REAL)x + 8, (REAL)cy, (REAL)w - 16, (REAL)ITEM_HEIGHT);
         bool active = (g_uiState.currentPage == AppPage::Messages &&
                        g_uiState.activeChatUser == dmUsers[i].username);
 
-        if (active || hoveredIndex == (int)i + 2)
-            FillRectSafe(hdc, &r, active ? COLOR_ITEM_ACTIVE : COLOR_ITEM_HOVER);
+        if (active || hoveredIndex == (int)i + 2) {
+            SolidBrush b(active ? COLOR_ITEM_ACTIVE : COLOR_ITEM_HOVER);
+            g.FillRectangle(&b, r);
+        }
 
-        SetTextColor(hdc, active ? RGB(255, 255, 255) : COLOR_TEXT);
-        DrawTextA(hdc, dmUsers[i].username.c_str(), -1, &r, DT_VCENTER | DT_SINGLELINE | DT_LEFT | DT_NOPREFIX);
-        cy += 40;
+        // Аватар со статусом (теперь берется из dmUsers[i].online)
+        DrawSmoothAvatar(g, r.X + 10, r.Y + 6, dmUsers[i].username, dmUsers[i].online);
+
+        // Имя
+        Gdiplus::Font nameFont(&fontFamily, 11, active ? FontStyleBold : FontStyleRegular, UnitPoint);
+        SolidBrush nameBrush(active ? COLOR_TEXT_BRIGHT : COLOR_TEXT_NORMAL);
+        RectF textRect(r.X + 50, r.Y, r.Width - 50, r.Height);
+        
+        StringFormat format;
+        format.SetLineAlignment(StringAlignmentCenter);
+        g.DrawString(std::wstring(dmUsers[i].username.begin(), dmUsers[i].username.end()).c_str(), 
+                     -1, &nameFont, textRect, &format, &nameBrush);
+
+        cy += ITEM_HEIGHT + ITEM_SPACING;
     }
-
-    SelectObject(hdc, oldFont);
-    DeleteObject(fontTitle);
-    DeleteObject(fontItem);
 }
 
-// Обработка клика по сайдбару
 void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     std::lock_guard<std::mutex> lock(dmMutex);
-    int cy = 12;
+    
+    // ВАЖНО: cy должен начинаться точно так же, как в Draw
+    int cy = TOP_OFFSET;
 
     // Кнопка "Друзья"
-    if (y >= cy && y <= cy + 36) {
+    if (y >= cy && y <= cy + BUTTON_HEIGHT) {
         g_uiState.currentPage = AppPage::Friends;
         ShowChatUI(false);
         InvalidateRect(hwnd, NULL, FALSE);
         return;
     }
-    cy += 40;
+    cy += BUTTON_HEIGHT + BUTTON_SPACING;
 
-    // Кнопка "Запросы общения"
-    if (y >= cy && y <= cy + 36) {
+    // Кнопка "Запросы"
+    if (y >= cy && y <= cy + BUTTON_HEIGHT) {
         g_uiState.currentPage = AppPage::FriendRequests;
         ShowChatUI(false);
         InvalidateRect(hwnd, NULL, FALSE);
         return;
     }
-    cy += 64;
+    
+    cy += BUTTON_HEIGHT + BUTTON_SPACING + 10 + 25; // Пропускаем заголовок
 
     // Список пользователей
     for (auto& u : dmUsers) {
-        if (y >= cy && y <= cy + 36) {
+        if (y >= cy && y <= cy + ITEM_HEIGHT) {
             g_uiState.currentPage = AppPage::Messages;
             g_uiState.activeChatUser = u.username;
             ShowChatUI(true);
             InvalidateRect(hwnd, NULL, FALSE);
             return;
         }
-        cy += 40;
+        cy += ITEM_HEIGHT + ITEM_SPACING;
     }
 }
-
-// Добавление нового пользователя в список
-void AddUserToDMList(HWND hwnd, const std::string& username) {
+void AddUserToDMList(HWND hwnd, const std::string& username, bool isOnline) {
     std::lock_guard<std::mutex> lock(dmMutex);
     
     auto it = std::find_if(dmUsers.begin(), dmUsers.end(), [&](const DMUser& u) {
         return u.username == username;
     });
-    if (it != dmUsers.end()) return;
 
-    DMUser newUser;
-    newUser.username = username;
-    newUser.id = "room_id"; // Можно заменить на реальный ID
-    dmUsers.push_back(newUser);
-
-    if (hwnd) {
-        RECT r = { 0, 0, SIDEBAR_WIDTH, 2000 };
-        InvalidateRect(hwnd, &r, FALSE);
+    if (it == dmUsers.end()) {
+        DMUser newUser;
+        newUser.username = username;
+        newUser.id = "room_id"; 
+        newUser.online = isOnline; 
+        dmUsers.push_back(newUser);
+    } else {
+        it->online = isOnline; 
     }
+    if (hwnd) InvalidateRect(hwnd, NULL, FALSE);
 }
 
-// Обновление всего списка друзей
-void UpdateAllFriends(const std::vector<DMUser>& friends) {
+void UpdateUserOnlineStatus(const std::string& username, bool isOnline) {
     std::lock_guard<std::mutex> lock(dmMutex);
-    dmUsers = friends;
+    
+    auto it = std::find_if(dmUsers.begin(), dmUsers.end(), [&](const DMUser& u) {
+        return u.username == username;
+    });
+
+    if (it != dmUsers.end()) {
+        it->online = isOnline;
+    }
 }

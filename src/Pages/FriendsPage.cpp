@@ -4,18 +4,17 @@
 #include "Utils/FriendsUtils.h"
 #include "Components/SidebarFriends.h"
 #include <vector>
+#include <objidl.h>
 #include <mutex>
 
 const int SIDEBAR_ICONS_W = 72;
 const int SIDEBAR_DM_W    = 240;
-const int CONTENT_START_X = SIDEBAR_ICONS_W + SIDEBAR_DM_W; // 312
+const int CONTENT_START_X = SIDEBAR_ICONS_W + SIDEBAR_DM_W; 
 
 FriendsFilter currentFilter = FriendsFilter::Online;
 std::vector<PendingRequest> pendingRequests;
 std::mutex pendingMutex;
-extern void AddUserToDMList(HWND hwnd, const std::string& username);
 
-// UI Colors
 #define COLOR_BG            RGB(32, 34, 37)
 #define COLOR_HEADER        RGB(49, 51, 56)
 #define COLOR_CARD          RGB(54, 57, 63)
@@ -37,14 +36,11 @@ void DrawCenteredText(HDC hdc, const wchar_t* text, RECT r, COLORREF color, HFON
 
 
 void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
-    // === Background ===
-    // Рисуем только в правой части окна
     RECT bg = { CONTENT_START_X, 0, width, height };
     HBRUSH hBrBg = CreateSolidBrush(COLOR_BG);
     FillRect(hdc, &bg, hBrBg);
     DeleteObject(hBrBg);
 
-    // === Header ===
     RECT header = { CONTENT_START_X, 0, width, 56 };
     HBRUSH hBrHead = CreateSolidBrush(COLOR_HEADER);
     FillRect(hdc, &header, hBrHead);
@@ -56,7 +52,6 @@ void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
     RECT titleRect = { CONTENT_START_X + 16, 0, CONTENT_START_X + 150, 56 };
     DrawCenteredText(hdc, L"Друзья", titleRect, COLOR_TEXT_MAIN, fontTitle);
 
-    // === Filters ===
     const wchar_t* filters[] = { L"В сети", L"Все", L"Ожидание" };
     int fx = CONTENT_START_X + 160;
 
@@ -73,7 +68,6 @@ void DrawFriendsPage(HDC hdc, HWND hwnd, int width, int height) {
         fx += 100;
     }
 
-    // === Add Friend Button ===
     RECT btnAdd = { width - 200, 12, width - 20, 44 };
     DrawRoundedRect(hdc, btnAdd, COLOR_BUTTON, 10);
     DrawCenteredText(hdc, L"+ Добавить друга", btnAdd, COLOR_TEXT_MAIN, fontNormal);
@@ -109,14 +103,12 @@ if (currentFilter == FriendsFilter::Pending) {
         }
     }
 
-    // Освобождаем ресурсы
     DeleteObject(fontTitle);
     DeleteObject(fontNormal);
 }
 
 
 void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
-    // ВАЖНО: используем 312 (72 + 240), как и при отрисовке
     int fx = CONTENT_START_X + 160; 
 
     // 1. Проверка кнопок фильтров (В сети, Все, Ожидание)
@@ -124,7 +116,7 @@ void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
         RECT r = { fx, 12, fx + 90, 44 };
         if (PtInRect(&r, { x, y })) {
             currentFilter = (FriendsFilter)i;
-            InvalidateRect(hwnd, NULL, FALSE); // Перерисовываем
+            InvalidateRect(hwnd, NULL, FALSE); 
             return;
         }
         fx += 100;
@@ -148,18 +140,17 @@ void HandleFriendsClick(HWND hwnd, int x, int y, HINSTANCE hInstance) {
         std::lock_guard<std::mutex> lock(pendingMutex);
         int yPos = 72;
         for (size_t i = 0; i < pendingRequests.size(); i++) {
-            // Кнопки привязаны к правому краю (rect.right)
             RECT accept = { rect.right - 120, yPos + 12, rect.right - 70, yPos + 44 };
             RECT reject = { rect.right - 60, yPos + 12, rect.right - 12, yPos + 44 };
 
             if (PtInRect(&accept, { x, y })) {
                 std::string acceptedName = pendingRequests[i].username;
                 AcceptFriendRequest(acceptedName); 
-                AddUserToDMList(hwnd, acceptedName);
-                
-                pendingRequests.erase(pendingRequests.begin() + i); // OK, так как мы сразу делаем return
+                AddUserToDMList(hwnd, acceptedName, true); 
+
+                pendingRequests.erase(pendingRequests.begin() + i);
                 InvalidateRect(hwnd, NULL, FALSE);
-                return; // Обязательно выходим из функции
+                return;
             }
             if (PtInRect(&reject, { x, y })) {
                 RejectFriendRequest(pendingRequests[i].username);

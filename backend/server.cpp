@@ -17,6 +17,24 @@ Database db;
 
 std::map<std::string, SOCKET> onlineUsers; 
 std::mutex users_mutex;
+void BroadcastStatusToFriends(const std::string& username, uint8_t status) {
+    // Получаем список друзей из БД
+    std::vector<std::string> friends = db.GetAcceptedFriends(username);
+    
+    UserStatusPacket sPkt;
+    sPkt.type = PACKET_USER_STATUS;
+    strncpy(sPkt.username, username.c_str(), 63);
+    sPkt.onlineStatus = status;
+
+    std::lock_guard<std::mutex> lock(users_mutex);
+    for (const auto& fName : friends) {
+        // Если друг онлайн — отправляем ему пакет
+        if (onlineUsers.count(fName)) {
+            send(onlineUsers[fName], (char*)&sPkt, sizeof(UserStatusPacket), 0);
+        }
+    }
+}
+
 
 void HandleClient(SOCKET client_socket) {
     char buffer[512]; 
@@ -45,27 +63,37 @@ void HandleClient(SOCKET client_socket) {
                 send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
             } 
             else if (packet->type == PACKET_LOGIN) {
-                if (db.AuthenticateUser(packet->username, packet->password)) {
-                    currentUsername = packet->username; 
-                    res.success = true;
-                    strcpy(res.message, "Welcome!");
+            if (db.AuthenticateUser(packet->username, packet->password)) {
+                currentUsername = packet->username; 
+                res.success = true;
+                strcpy(res.message, "Welcome!");
 
+                {
+                    std::lock_guard<std::mutex> lock(users_mutex);
+                    onlineUsers[currentUsername] = client_socket;
+                }
+                send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
+
+                // 1. Оповещаем друзей, что мы теперь ОНЛАЙН
+                BroadcastStatusToFriends(currentUsername, 1);
+
+                // 2. Отправляем пользователю список его друзей с их ТЕКУЩИМ статусом
+                std::vector<std::string> friends = db.GetAcceptedFriends(currentUsername);
+                for (const auto& fName : friends) {
+                    RoomPacket rPkt;
+                    rPkt.type = PACKET_ROOM_LIST;
+                    memset(rPkt.username, 0, 64);
+                    strncpy(rPkt.username, fName.c_str(), 63);
+                    
+                    // Проверяем, онлайн ли этот друг прямо сейчас
                     {
                         std::lock_guard<std::mutex> lock(users_mutex);
-                        onlineUsers[currentUsername] = client_socket;
+                        rPkt.onlineStatus = (onlineUsers.count(fName) > 0) ? 1 : 0;
                     }
-                    send(client_socket, (char*)&res, sizeof(ResponsePacket), 0);
 
-                    // Отправляем список друзей для сайдбара
-                    std::vector<std::string> friends = db.GetAcceptedFriends(currentUsername);
-                    for (const auto& fName : friends) {
-                        FriendActionPacket fPkt = { PACKET_FRIEND_ACCEPT }; 
-                        strncpy(fPkt.targetUsername, fName.c_str(), 31);
-                        
-                        // Добавим небольшую задержку или убедимся, что клиент готов принимать
-                        send(client_socket, (char*)&fPkt, sizeof(FriendActionPacket), 0);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Предотвращает склеивание пакетов
-                    }
+                    send(client_socket, (char*)&rPkt, sizeof(RoomPacket), 0);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
 
                     // Отправляем оффлайн-заявки
                     std::vector<std::string> pending = db.GetPendingRequests(currentUsername);
@@ -145,21 +173,24 @@ void HandleClient(SOCKET client_socket) {
             send(onlineUsers[target], (char*)cPkt, sizeof(ChatMessagePacket), 0);
         }
     }
-
-
-
-
     }
 
     if (!currentUsername.empty()) {
-        std::lock_guard<std::mutex> lock(users_mutex);
-        onlineUsers.erase(currentUsername);
+            BroadcastStatusToFriends(currentUsername, 0);
+
+            std::lock_guard<std::mutex> lock(users_mutex);
+            onlineUsers.erase(currentUsername);
+            std::cout << "[SERVER] User logout: " << currentUsername << std::endl;
+        }
+        
+        // Стандартная очистка сокета
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            clients.erase(std::remove(clients.begin(), clients.end(), client_socket), clients.end());
+        }
+        closesocket(client_socket);
     }
-    
-    std::lock_guard<std::mutex> lock(clients_mutex);
-    clients.erase(std::remove(clients.begin(), clients.end(), client_socket), clients.end());
-    closesocket(client_socket);
-}
+
 
 int main() {
     SetConsoleCP(65001); SetConsoleOutputCP(65001);

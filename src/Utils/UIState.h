@@ -14,6 +14,7 @@ struct UIState {
 struct DMUser {
     std::string username;
     std::string id; 
+    bool online;
 };
 
 extern UIState g_uiState;

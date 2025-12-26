@@ -62,7 +62,9 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_CREATE: {
         int startX = SIDEBAR_ICONS + SIDEBAR_DM;
-        CreateMessageInput(hwnd, startX + 10, 100, 100, INPUT_MIN_HEIGHT);
+        CreateSidebar(hwnd, 0, 0, SIDEBAR_ICONS, 1000); // Высота подстроится в WM_SIZE
+
+         CreateMessageInput(hwnd, startX + 10, 100, 100, INPUT_MIN_HEIGHT);
         
         if (hInputEdit) {
             SetWindowSubclass(hInputEdit, MessageInputSubclass, 0, (DWORD_PTR)hwnd);
@@ -114,8 +116,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         FillRect(memDC, &rect, hBg);
         DeleteObject(hBg);
 
-        // 2. Сайдбары
-        OnPaintSidebar(memDC, SIDEBAR_ICONS, rect.bottom);
         DrawSidebarFriends(memDC, hwnd, SIDEBAR_ICONS, 0, SIDEBAR_DM, rect.bottom);
 
         // 3. Контент
@@ -152,9 +152,15 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_SIZE: {
         int width  = LOWORD(lParam);
         int height = HIWORD(lParam);
-        int chatX  = SIDEBAR_ICONS + SIDEBAR_DM;
-        int chatW  = width - chatX;
+        
+        // Изменяем размер окна сайдбара
+        if (hSidebar) {
+            MoveWindow(hSidebar, 0, 0, SIDEBAR_ICONS, height, TRUE);
+        }
 
+        // Изменяем размер инпута
+        int chatX = SIDEBAR_ICONS + SIDEBAR_DM;
+        int chatW = width - chatX;
         if (hInputEdit) {
             MoveWindow(hInputEdit, chatX + 20, height - inputEditHeight - 20, chatW - 40, inputEditHeight, TRUE);
         }

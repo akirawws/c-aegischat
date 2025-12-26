@@ -13,7 +13,8 @@ enum PacketType : uint8_t {
     PACKET_FRIEND_ACCEPT = 5,
     PACKET_FRIEND_REJECT = 6,
     PACKET_ROOM_LIST = 7,      
-    PACKET_CHAT_MESSAGE = 8    
+    PACKET_CHAT_MESSAGE = 8,
+    PACKET_USER_STATUS = 9  
 };
 
 struct AuthPacket {
@@ -43,7 +44,8 @@ struct FriendActionPacket {
 
 struct RoomPacket {
     uint8_t type;
-    char username[64]; // Сделал 64 для единообразия
+    char username[64]; 
+    uint8_t onlineStatus;
 };
 
 struct ChatMessagePacket {
@@ -52,7 +54,11 @@ struct ChatMessagePacket {
     char targetUsername[64];  
     char content[384];       
 };
-
+struct UserStatusPacket {
+    uint8_t type;
+    char username[64];
+    uint8_t onlineStatus;    
+};
 
 #pragma pack(pop)
 #endif

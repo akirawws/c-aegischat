@@ -8,11 +8,9 @@
 #include <cstring>
 #include <string>
 
-// Состояния страницы
 enum AuthState { STATE_LOGIN, STATE_REGISTER };
 AuthState currentAuthState = STATE_LOGIN;
 
-// Хендлы элементов управления
 HWND hAuthWnd = NULL;
 HWND hNameEdit = NULL;     
 HWND hEmailEdit = NULL;    
@@ -24,7 +22,6 @@ HWND hSwitchBtn = NULL;
 
 extern HWND hMainWnd;
 
-// Вспомогательная функция для переключения видимости
 void ToggleAuthMode(HWND hwnd) {
     if (currentAuthState == STATE_LOGIN) {
         ShowWindow(hEmailEdit, SW_HIDE);
@@ -52,7 +49,6 @@ HWND CreateAuthPage(HINSTANCE hInstance, int x, int y, int width, int height) {
 
     RegisterClassA(&wc);
 
-    // Увеличим высоту до 520
     hAuthWnd = CreateWindowA(
         "AuthWindow",
         "AEGIS — Authorization",
@@ -122,7 +118,6 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             GetWindowTextA(hNameEdit, name, 256);
             GetWindowTextA(hPassEdit, pass, 256);
 
-            // 1. Проверки для регистрации
             if (currentAuthState == STATE_REGISTER) {
                 GetWindowTextA(hEmailEdit, email, 256);
                 GetWindowTextA(hPassConfirmEdit, passConf, 256);
@@ -137,10 +132,8 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 }
             }
 
-            // 2. ХЕШИРОВАНИЕ ПАРОЛЯ
             std::string hashedPassword = HashPassword(pass, name);
 
-            // 3. Подготовка пакета
             AuthPacket packet = { 0 };
             if (currentAuthState == STATE_REGISTER) {
                 packet.type = PACKET_REGISTER;
@@ -153,7 +146,6 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             strncpy(packet.password, hashedPassword.c_str(), sizeof(packet.password) - 1); 
             packet.rememberMe = (SendMessage(hRememberCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
-            // 4. Отправка и обработка ответа
             if (SendPacket((char*)&packet, sizeof(AuthPacket))) {
                 ResponsePacket response = { 0 };
                 if (ReceivePacket((char*)&response, sizeof(ResponsePacket))) {
@@ -164,17 +156,15 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                             ToggleAuthMode(hwnd);
                         } else {
                             userName = name; 
-                            StartMessageSystem(); // Запуск фонового потока чата
+                            StartMessageSystem();
                             WriteLog("User logged in: " + userName);
                             
-                            // СОЗДАЕМ главное окно, если оно еще не создано
                             if (!hMainWnd) {
                                 WriteLog("Creating main window...");
                                 
-                                // Получаем дескриптор экземпляра приложения
                                 HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
                                 
-                                // Создаем главное окно с центрированием
+
                                 int screenWidth = GetSystemMetrics(SM_CXSCREEN);
                                 int screenHeight = GetSystemMetrics(SM_CYSCREEN);
                                 int windowWidth = 1200;
@@ -194,10 +184,8 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                         std::to_string((long long)hMainWnd));
                             }
                             
-                            // Скрываем окно авторизации
                             ShowWindow(hwnd, SW_HIDE);
-                            
-                            // Показываем главное окно
+
                             if (hMainWnd) {
                                 WriteLog("Showing main window...");
                                 ShowWindow(hMainWnd, SW_SHOW);

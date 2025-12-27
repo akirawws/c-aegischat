@@ -11,29 +11,25 @@
 #include <string>
 
 #pragma comment(lib, "gdiplus.lib")
-
 using namespace Gdiplus;
-extern bool g_isLoadingHistory; // Удалите "= false", добавьте extern
-int g_historyOffset = 0;
+extern bool g_isLoadingHistory; 
+extern int g_historyOffset;
+extern std::vector<Message> messages; 
+extern std::map<std::string, std::vector<Message>> chatHistories;
+extern std::vector<DMUser> dmUsers;
+extern std::mutex dmMutex; 
 extern int scrollPos;
 extern void ShowChatUI(bool show);
 extern void RequestChatHistory(const std::string& target, int offset);
-extern std::vector<Message> messages; // Ваш глобальный вектор сообщений на экране
-extern HWND hMessageList;             // Хендл окна списка сообщений
-extern std::map<std::string, std::vector<Message>> chatHistories;
+extern HWND hMessageList; 
+extern UIState g_uiState;
 
-static std::vector<DMUser> dmUsers;
-static std::mutex dmMutex; 
 static int hoveredIndex = -1;
-
-// Константы размеров для точного совпадения отрисовки и кликов
 const int ITEM_HEIGHT = 44;
 const int ITEM_SPACING = 4;
 const int TOP_OFFSET = 15;
 const int BUTTON_HEIGHT = 42;
 const int BUTTON_SPACING = 4;
-
-// Цвета
 #define COLOR_BG_DM          Color(255, 43, 45, 49)
 #define COLOR_ITEM_HOVER     Color(255, 53, 55, 60)
 #define COLOR_ITEM_ACTIVE    Color(255, 63, 65, 71)
@@ -42,21 +38,21 @@ const int BUTTON_SPACING = 4;
 #define COLOR_STATUS_ONLINE  Color(255, 35, 165, 90)
 #define COLOR_STATUS_OFFLINE Color(255, 128, 132, 142)
 
-// Красивая плавная отрисовка аватара и статуса через GDI+
+static void SortDMUsers() {
+    std::sort(dmUsers.begin(), dmUsers.end(), [](const DMUser& a, const DMUser& b) {
+        return a.lastMessageTime > b.lastMessageTime;
+    });
+}
+
 static void DrawSmoothAvatar(Graphics& g, float x, float y, const std::string& name, bool online) {
     g.SetSmoothingMode(SmoothingModeAntiAlias);
 
     float size = 32.0f;
     RectF rect(x, y, size, size);
-
-    // 1. Фон аватара
     SolidBrush avatarBrush(Color(255, 80, 84, 92));
     g.FillEllipse(&avatarBrush, rect);
-
-    // 2. Буква (текст)
     std::wstring letter = L"";
     if (!name.empty()) letter += (wchar_t)toupper(name[0]);
-
     FontFamily fontFamily(L"Segoe UI");
     Gdiplus::Font font(&fontFamily, 12, FontStyleBold, UnitPoint);
     SolidBrush textBrush(Color(255, 220, 221, 222));
@@ -65,17 +61,11 @@ static void DrawSmoothAvatar(Graphics& g, float x, float y, const std::string& n
     format.SetAlignment(StringAlignmentCenter);
     format.SetLineAlignment(StringAlignmentCenter);
     g.DrawString(letter.c_str(), -1, &font, rect, &format, &textBrush);
-
-    // 3. Индикатор статуса
     float sSize = 12.0f;
     float sX = x + size - sSize + 2;
     float sY = y + size - sSize + 2;
-    
-    // Обводка статуса (под цвет фона, чтобы выглядело как вырез)
     SolidBrush bgStroke(COLOR_BG_DM);
     g.FillEllipse(&bgStroke, sX - 2, sY - 2, sSize + 4, sSize + 4);
-
-    // Сам кружок статуса
     SolidBrush statusBrush(online ? COLOR_STATUS_ONLINE : COLOR_STATUS_OFFLINE);
     g.FillEllipse(&statusBrush, sX, sY, sSize, sSize);
 }
@@ -83,7 +73,7 @@ static void DrawSmoothAvatar(Graphics& g, float x, float y, const std::string& n
 static void DrawDiscordButton(Graphics& g, RectF rect, const std::wstring& text, bool active, bool hovered) {
     if (active || hovered) {
         SolidBrush b(active ? COLOR_ITEM_ACTIVE : COLOR_ITEM_HOVER);
-        g.FillRectangle(&b, rect); // В идеале здесь GraphicsPath для RoundRect, но для краткости Rect
+        g.FillRectangle(&b, rect); 
     }
 
     FontFamily fontFamily(L"Segoe UI");
@@ -102,14 +92,9 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
     Graphics g(hdc);
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-
-    // Очистка фона
     SolidBrush bgBrush(COLOR_BG_DM);
     g.FillRectangle(&bgBrush, (REAL)x, (REAL)y, (REAL)w, (REAL)h);
-
     int cy = y + TOP_OFFSET;
-
-    // --- Кнопки ---
     const wchar_t* buttons[] = { L"Друзья", L"Запросы общения" };
     for (int i = 0; i < 2; i++) {
         RectF r((REAL)x + 8, (REAL)cy, (REAL)w - 16, (REAL)BUTTON_HEIGHT);
@@ -120,35 +105,25 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
         cy += BUTTON_HEIGHT + BUTTON_SPACING;
     }
 
-    cy += 10; // Отступ перед заголовком
-
-    // Заголовок
+    cy += 10;
     FontFamily fontFamily(L"Segoe UI");
     Gdiplus::Font titleFont(&fontFamily, 9, FontStyleBold, UnitPoint);
     SolidBrush titleBrush(COLOR_TEXT_NORMAL);
     g.DrawString(L"ЛИЧНЫЕ ЧАТЫ", -1, &titleFont, PointF((REAL)x + 18, (REAL)cy), &titleBrush);
-    
-    cy += 25; // Высота заголовка
-
-    // --- Список пользователей ---
+    cy += 25; 
     for (size_t i = 0; i < dmUsers.size(); i++) {
         RectF r((REAL)x + 8, (REAL)cy, (REAL)w - 16, (REAL)ITEM_HEIGHT);
         bool active = (g_uiState.currentPage == AppPage::Messages &&
                        g_uiState.activeChatUser == dmUsers[i].username);
-
         if (active || hoveredIndex == (int)i + 2) {
             SolidBrush b(active ? COLOR_ITEM_ACTIVE : COLOR_ITEM_HOVER);
             g.FillRectangle(&b, r);
         }
 
-        // Аватар со статусом (теперь берется из dmUsers[i].online)
         DrawSmoothAvatar(g, r.X + 10, r.Y + 6, dmUsers[i].username, dmUsers[i].online);
-
-        // Имя
         Gdiplus::Font nameFont(&fontFamily, 11, active ? FontStyleBold : FontStyleRegular, UnitPoint);
         SolidBrush nameBrush(active ? COLOR_TEXT_BRIGHT : COLOR_TEXT_NORMAL);
         RectF textRect(r.X + 50, r.Y, r.Width - 50, r.Height);
-        
         StringFormat format;
         format.SetLineAlignment(StringAlignmentCenter);
         g.DrawString(std::wstring(dmUsers[i].username.begin(), dmUsers[i].username.end()).c_str(), 
@@ -160,11 +135,7 @@ void DrawSidebarFriends(HDC hdc, HWND hwnd, int x, int y, int w, int h) {
 
 void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     std::lock_guard<std::mutex> lock(dmMutex);
-    
-    // ВАЖНО: cy должен начинаться точно так же, как в Draw
     int cy = TOP_OFFSET;
-
-    // Кнопка "Друзья"
     if (y >= cy && y <= cy + BUTTON_HEIGHT) {
         g_uiState.currentPage = AppPage::Friends;
         ShowChatUI(false);
@@ -172,8 +143,6 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
         return;
     }
     cy += BUTTON_HEIGHT + BUTTON_SPACING;
-
-    // Кнопка "Запросы"
     if (y >= cy && y <= cy + BUTTON_HEIGHT) {
         g_uiState.currentPage = AppPage::FriendRequests;
         ShowChatUI(false);
@@ -181,9 +150,7 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
         return;
     }
     
-    cy += BUTTON_HEIGHT + BUTTON_SPACING + 10 + 25; // Пропускаем заголовок
-
-    // Список пользователей
+    cy += BUTTON_HEIGHT + BUTTON_SPACING + 10 + 25; 
     for (auto& u : dmUsers) {
             if (y >= cy && y <= cy + ITEM_HEIGHT) {
                 if (g_uiState.activeChatUser == u.username) return;
@@ -206,23 +173,33 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
 }
 void AddUserToDMList(HWND hwnd, const std::string& username, bool isOnline) {
     std::lock_guard<std::mutex> lock(dmMutex);
-    
     auto it = std::find_if(dmUsers.begin(), dmUsers.end(), [&](const DMUser& u) {
         return u.username == username;
     });
-
     if (it == dmUsers.end()) {
         DMUser newUser;
         newUser.username = username;
-        newUser.id = "room_id"; 
         newUser.online = isOnline; 
+        newUser.lastMessageTime = 0; 
         dmUsers.push_back(newUser);
+        SortDMUsers();
     } else {
         it->online = isOnline; 
     }
     if (hwnd) InvalidateRect(hwnd, NULL, FALSE);
 }
+void UpdateUserActivity(const std::string& username) {
+    std::lock_guard<std::mutex> lock(dmMutex);
+    
+    auto it = std::find_if(dmUsers.begin(), dmUsers.end(), [&](const DMUser& u) {
+        return u.username == username;
+    });
 
+    if (it != dmUsers.end()) {
+        it->lastMessageTime = (long long)time(NULL);
+        SortDMUsers(); 
+    }
+}
 void UpdateUserOnlineStatus(const std::string& username, bool isOnline) {
     std::lock_guard<std::mutex> lock(dmMutex);
     

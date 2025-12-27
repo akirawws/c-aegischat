@@ -19,15 +19,15 @@
 
 using namespace Gdiplus;
 
-// --- Глобальные переменные ---
+
 HWND hSidebar = NULL;
 static int g_activeIndex = 0;
 static int g_hoverIndex = -1;
 static HWND hTooltip = NULL;
 static bool g_mouseTracking = false;
-static Gdiplus::Image* g_pMainIcon = NULL; // Указатель на иконку
+static Gdiplus::Image* g_pMainIcon = NULL; 
 
-// Цвета
+
 const Color CLR_SIDEBAR_BG(255, 30, 31, 34);
 const Color CLR_ITEM_BG(255, 49, 51, 56);
 const Color CLR_BLURPLE(255, 88, 101, 242);
@@ -37,7 +37,6 @@ const Color CLR_SEP(255, 45, 47, 51);
 
 const std::wstring g_tooltips[] = { L"Главная", L"Developer Blog", L"Добавить сервер" };
 
-// --- Реализация функций ---
 
 HWND CreateSidebar(HWND hParent, int x, int y, int width, int height) {
     hSidebar = CreateWindowExA(0, "SidebarWindow", NULL,
@@ -87,7 +86,7 @@ void UpdateTooltipText(HWND hwnd, const std::wstring& text) {
 
 void DrawSidebarItem(Graphics& g, int centerX, int centerY, const std::wstring& text, bool isPlus, bool active, bool hover, Gdiplus::Image* pImg = NULL) {
     g.SetSmoothingMode(SmoothingModeAntiAlias);
-    g.SetInterpolationMode(InterpolationModeHighQualityBicubic); // Для качественного ресайза картинки
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic); 
     
     Color bgColor = CLR_ITEM_BG;
     if (isPlus) {
@@ -101,7 +100,6 @@ void DrawSidebarItem(Graphics& g, int centerX, int centerY, const std::wstring& 
     float x = (float)centerX - size / 2;
     float y = (float)centerY - size / 2;
 
-    // Рисуем фон (круг или скругленный квадрат)
     if (active || hover) {
         GraphicsPath path;
         float r = 14.0f; 
@@ -121,14 +119,11 @@ void DrawSidebarItem(Graphics& g, int centerX, int centerY, const std::wstring& 
         g.DrawLine(&plusPen, centerX, centerY - 8, centerX, centerY + 8);
     } 
     else if (pImg) {
-        // Отрисовка картинки (icon.png)
-        // Отступы внутри круга, чтобы картинка не касалась краев (например, 10px)
         float padding = 10.0f;
         float imgSize = size - padding * 2;
         g.DrawImage(pImg, x + padding, y + padding, imgSize, imgSize);
     }
     else {
-        // Отрисовка текста (dev)
         FontFamily fontFamily(L"Segoe UI");
         Gdiplus::Font font(&fontFamily, 11, FontStyleBold, UnitPoint);
         SolidBrush textBrush(CLR_WHITE);

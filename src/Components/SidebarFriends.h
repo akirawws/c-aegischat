@@ -11,3 +11,4 @@ void HandleSidebarFriendsHover(HWND hwnd, int mouseX, int mouseY);
 void SetDMUsers(const std::vector<DMUser>& users);
 void AddUserToDMList(HWND hwnd, const std::string& username, bool isOnline = false);
 void UpdateUserOnlineStatus(const std::string& username, bool isOnline);
+void UpdateUserActivity(const std::string& username);

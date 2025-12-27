@@ -15,6 +15,7 @@ struct DMUser {
     std::string username;
     std::string id; 
     bool online;
+    long long lastMessageTime;
 };
 
 extern UIState g_uiState;

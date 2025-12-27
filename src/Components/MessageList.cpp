@@ -14,7 +14,6 @@ extern std::map<std::string, std::vector<Message>> chatHistories;
 extern UIState g_uiState;
 int scrollPos = 0;
 
-// Константы цветов Discord
 #define DC_COLOR_BG           Color(255, 49, 51, 56)
 #define DC_COLOR_TEXT_MAIN    Color(255, 219, 222, 225)
 #define DC_COLOR_TEXT_MUTED   Color(255, 148, 155, 164)
@@ -26,7 +25,6 @@ void DrawDiscordMessage(Graphics& g, const Message& msg, int& y, int w, bool isS
     int avatarSize = 40;
     int contentLeft = avatarMargin + avatarSize + 16;
 
-    // 1. Очистка ника от символа '#'
     std::string cleanSender = msg.sender;
     cleanSender.erase(std::remove(cleanSender.begin(), cleanSender.end(), '#'), cleanSender.end());
 
@@ -37,14 +35,12 @@ void DrawDiscordMessage(Graphics& g, const Message& msg, int& y, int w, bool isS
     FontFamily fontFamily(L"Segoe UI");
     
     if (!isSameSender) {
-        y += 12; // Отступ между блоками сообщений разных людей
+        y += 12;
         
-        // --- Рисуем аватар ---
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         SolidBrush avatarBrush(DC_COLOR_AVATAR_BG);
         g.FillEllipse(&avatarBrush, (REAL)avatarMargin, (REAL)y, (REAL)avatarSize, (REAL)avatarSize);
 
-        // Буква в аватаре
         Font letterFont(&fontFamily, 16, FontStyleBold, UnitPixel);
         StringFormat sf;
         sf.SetAlignment(StringAlignmentCenter);
@@ -54,14 +50,11 @@ void DrawDiscordMessage(Graphics& g, const Message& msg, int& y, int w, bool isS
         RectF avatarRect((REAL)avatarMargin, (REAL)y, (REAL)avatarSize, (REAL)avatarSize);
         g.DrawString(letter.c_str(), -1, &letterFont, avatarRect, &sf, &whiteBrush);
 
-        // --- Рисуем Никнейм ---
-        // Используем ClearType для максимальной четкости
         g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
         Font nameFont(&fontFamily, 16, FontStyleBold, UnitPixel);
         SolidBrush nameBrush(DC_COLOR_USERNAME);
         g.DrawString(wSender.c_str(), -1, &nameFont, PointF((REAL)contentLeft, (REAL)y - 2), &nameBrush);
 
-        // --- Рисуем Время ---
         RectF nameBounds;
         g.MeasureString(wSender.c_str(), -1, &nameFont, PointF(0, 0), &nameBounds);
         

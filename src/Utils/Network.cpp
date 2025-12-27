@@ -10,21 +10,27 @@
 #include <algorithm>
 #include <mutex>
 #include <map>
-extern std::vector<Message> messages;
-extern std::string activeChatUser; 
-extern std::map<std::string, std::vector<Message>> chatHistories;
-extern int g_historyOffset;
+
+std::map<std::string, std::vector<Message>> chatHistories;
+std::vector<Message> messages; 
+std::vector<DMUser> dmUsers;
+std::string activeChatUser = "";
+
+int g_historyOffset = 0;
 bool g_isLoadingHistory = false;
 SOCKET clientSocket = INVALID_SOCKET;
 bool isConnected = false;
+
 std::thread receiveThread;
 std::string userName = "User"; 
 std::string currentUserName = "";
 std::string userAvatar = "[^.^]";
+std::mutex dmMutex; 
+
 extern std::vector<PendingRequest> pendingRequests;
 extern std::mutex pendingMutex; 
 extern HWND hMainWnd;
-std::map<std::string, std::vector<Message>> chatHistories;
+extern HWND hMessageList;
 bool ConnectToServer(const std::string& address, const std::string& port) {
     if (clientSocket != INVALID_SOCKET) {
         isConnected = false;
@@ -187,51 +193,55 @@ void ReceiveMessages() {
                 char targetName[65] = {0};
                 memcpy(targetName, sPkt.username, 64);
                 
-                // Обновляем статус в памяти
                 UpdateUserOnlineStatus(std::string(targetName), (sPkt.onlineStatus == 1));
                 
-                // ФОРСИРУЕМ ПЕРЕРИСОВКУ ВСЕГО ОКНА
                 if (hMainWnd) {
                     InvalidateRect(hMainWnd, NULL, FALSE);
-                    UpdateWindow(hMainWnd); // Немедленно вызывает WM_PAINT
+                    UpdateWindow(hMainWnd); 
                 }
             }
         }
+
         if (packetType == PACKET_CHAT_MESSAGE) {
             ChatMessagePacket cPkt;
-            cPkt.type = packetType;
             if (ReceiveExact((char*)&cPkt + 1, sizeof(ChatMessagePacket) - 1)) {
                 std::string sender = cPkt.senderUsername;
+                std::string target = cPkt.targetUsername; 
                 
                 Message m;
-                m.text = std::string(cPkt.content);
+                m.text = cPkt.content;
                 m.sender = sender;
-                m.isMine = (sender == userName); 
+                m.isMine = (sender == userName);
                 m.timeStr = GetCurrentTimeStr();
+                std::string chatKey = (target == userName) ? sender : target;
 
-                chatHistories[sender].push_back(m);
-                if (g_uiState.activeChatUser == sender) {
+                chatHistories[chatKey].push_back(m);
+
+                if (g_uiState.activeChatUser == chatKey) {
                     messages.push_back(m);
                     if (hMessageList) {
                         InvalidateRect(hMessageList, NULL, TRUE);
-                        // Авто-скролл вниз
                         PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
                     }
                 }
                 if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
             }
         }
+        else if (packetType == PACKET_CREATE_GROUP) {
+            CreateGroupPacket gPkt;
+            if (ReceiveExact((char*)&gPkt + 1, sizeof(CreateGroupPacket) - 1)) {
+                AddUserToDMList(hMainWnd, std::string(gPkt.groupName), true); 
+            }
+        }
             else if (packetType == PACKET_CHAT_HISTORY) {
                 ChatHistoryEntryPacket hPkt;
                 hPkt.type = packetType;
                 if (ReceiveExact((char*)&hPkt + 1, sizeof(ChatHistoryEntryPacket) - 1)) {
-                    
-                    // Используем статический флаг для очистки только перед первым сообщением ПАЧКИ
                     static bool needsClear = true; 
 
                     if (needsClear) {
                         chatHistories[g_uiState.activeChatUser].clear();
-                        messages.clear(); // Сразу очищаем экран
+                        messages.clear(); 
                         needsClear = false;
                     }
 
@@ -240,21 +250,15 @@ void ReceiveMessages() {
                     m.sender = hPkt.senderUsername;
                     m.timeStr = hPkt.timestamp;
                     m.isMine = (m.sender == userName);
-
-                    // 1. Добавляем в кэш
                     chatHistories[g_uiState.activeChatUser].push_back(m);
-                    
-                    // 2. СРАЗУ добавляем в активный список, чтобы сообщения появлялись постепенно
                     messages.push_back(m);
-
-                    // Отрисовываем каждое сообщение (опционально для плавности)
                     if (hMessageList) {
                         InvalidateRect(hMessageList, NULL, FALSE);
                     }
 
                     if (hPkt.isLast) {
                         g_isLoadingHistory = false;
-                        needsClear = true; // Сбрасываем флаг для следующего запроса истории
+                        needsClear = true; 
                         
                         if (hMessageList) {
                             InvalidateRect(hMessageList, NULL, TRUE);
@@ -283,12 +287,8 @@ void ReceiveMessages() {
             }
         }
         else {
-            // Если пришел неизвестный пакет или старый текстовый формат
-            // В твоем старом коде тут был ParseMessage. 
-            // Но в протоколе на структурах сюда попадать не должно.
         }
     }
-    // Конец цикла — закрываем всё
     isConnected = false;
     if (clientSocket != INVALID_SOCKET) {
         closesocket(clientSocket);
@@ -315,14 +315,14 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
     if (send(clientSocket, (char*)&pkt, sizeof(ChatMessagePacket), 0) != SOCKET_ERROR) {
         Message m;
         m.text = text;
-        m.sender = userName; // Моё имя
+        m.sender = userName;
         m.isMine = true;
         m.time = GetCurrentTimeStr();
 
         chatHistories[target].push_back(m);
 
         if (g_uiState.activeChatUser == target) {
-            messages.push_back(m);   // ← ДОБАВИТЬ
+            messages.push_back(m);   
         }
 
         InvalidateRect(hMessageList, NULL, TRUE);
@@ -337,45 +337,36 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
 void SendPrivateMessageFromUI() {
     if (!isConnected || clientSocket == INVALID_SOCKET) return;
     if (g_uiState.activeChatUser.empty()) return;
-
-    // 1. Читаем текст из Edit в WideChar (Unicode), чтобы сохранить русские буквы
     wchar_t wMsgBuf[512]; 
     GetWindowTextW(hInputEdit, wMsgBuf, 512); 
     if (wcslen(wMsgBuf) == 0) return;
 
-    // 2. Конвертируем Unicode (UTF-16) в UTF-8 для отправки по сети
     char utf8Content[sizeof(ChatMessagePacket().content)]; 
     ZeroMemory(utf8Content, sizeof(utf8Content));
     
     WideCharToMultiByte(CP_UTF8, 0, wMsgBuf, -1, utf8Content, sizeof(utf8Content) - 1, NULL, NULL);
 
-    // 3. Формируем пакет
     ChatMessagePacket pkt{};
     pkt.type = PACKET_CHAT_MESSAGE;
 
-    // Очищаем поля перед заполнением
     memset(pkt.senderUsername, 0, 64);
     memset(pkt.targetUsername, 0, 64);
 
     strncpy(pkt.senderUsername, userName.c_str(), 63);
     strncpy(pkt.targetUsername, g_uiState.activeChatUser.c_str(), 63);
     
-    // Копируем уже готовый UTF-8 контент
     memcpy(pkt.content, utf8Content, sizeof(pkt.content));
 
-    // 4. Отправляем через ваш SendPacket (который должен содержать цикл while)
     if (SendPacket((char*)&pkt, sizeof(ChatMessagePacket))) { 
         Message m;
-        // Для локального отображения конвертируем обратно или используем строку как есть
         m.text = utf8Content; 
         m.sender = userName;
         m.isMine = true;
         m.timeStr = GetCurrentTimeStr();
-
+        UpdateUserActivity(g_uiState.activeChatUser);
         chatHistories[g_uiState.activeChatUser].push_back(m);
         messages.push_back(m); 
 
-        // Очищаем поле ввода (Unicode-версия)
         SetWindowTextW(hInputEdit, L"");
         
         InvalidateRect(hMessageList, NULL, TRUE);
@@ -387,8 +378,6 @@ void SendPrivateMessageFromUI() {
 }
 void RequestChatHistory(const std::string& target, int offset) {
     if (!isConnected || target.empty() || g_isLoadingHistory) return;
-
-    // Сбрасываем глобальный оффсет, чтобы блок ReceiveMessages знал, что пора чистить кэш
     g_historyOffset = offset; 
     g_isLoadingHistory = true;
 
@@ -399,4 +388,28 @@ void RequestChatHistory(const std::string& target, int offset) {
     strncpy(req.targetUsername, target.c_str(), 63);
 
     SendPacket((char*)&req, sizeof(HistoryRequestPacket));
+}
+
+void RequestCreateGroup(const std::vector<std::string>& members) {
+    #pragma pack(push, 1)
+    struct CreateGroupRequestPacket {
+        uint8_t type;
+        int count;
+        char memberList[10][64]; 
+    };
+    #pragma pack(pop)
+
+    CreateGroupRequestPacket pkt;
+    memset(&pkt, 0, sizeof(pkt));
+
+    pkt.type = 11; 
+    pkt.count = (int)members.size();
+
+    for (int i = 0; i < pkt.count && i < 10; ++i) {
+        strncpy(pkt.memberList[i], members[i].c_str(), 63);
+    }
+
+    if (!SendPacket((char*)&pkt, sizeof(pkt))) {
+        MessageBoxA(NULL, "Не удалось отправить запрос на создание группы", "Ошибка сети", MB_OK | MB_ICONERROR);
+    }
 }

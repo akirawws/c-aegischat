@@ -15,7 +15,9 @@ enum PacketType : uint8_t {
     PACKET_ROOM_LIST = 7,      
     PACKET_CHAT_MESSAGE = 8,
     PACKET_USER_STATUS = 9,
-    PACKET_CHAT_HISTORY = 10
+    PACKET_CHAT_HISTORY = 10,
+    PACKET_CREATE_GROUP = 11,
+    PACKET_GROUP_LIST = 12
 };
 
 struct AuthPacket {
@@ -72,6 +74,13 @@ struct ChatHistoryEntryPacket {
     char content[512];
     char timestamp[32]; 
     bool isLast;      
+};
+
+struct CreateGroupPacket {
+    uint8_t type;
+    char groupName[64];
+    int userCount;
+    char members[10][64]; 
 };
 
 #pragma pack(pop)

@@ -164,6 +164,25 @@ void HandleClient(SOCKET client_socket) {
                 }
             }
         }
+        else if (packetType == PACKET_CREATE_GROUP) {
+            CreateGroupPacket* gPkt = (CreateGroupPacket*)buffer;
+            
+            std::vector<std::string> memberList;
+            memberList.push_back(currentUsername);
+            for (int i = 0; i < gPkt->userCount; i++) {
+                memberList.push_back(gPkt->members[i]);
+            }
+
+            if (db.CreateGroup(gPkt->groupName, memberList)) {
+                std::cout << "[SERVER] Group created: " << gPkt->groupName << std::endl;
+                std::lock_guard<std::mutex> lock(users_mutex);
+                for (const auto& member : memberList) {
+                    if (onlineUsers.count(member)) {
+                        send(onlineUsers[member], (char*)gPkt, sizeof(CreateGroupPacket), 0);
+                    }
+                }
+            }
+        }
 
         else if (packetType == PACKET_CHAT_MESSAGE) {
             ChatMessagePacket cPkt;

@@ -29,6 +29,7 @@ public:
     std::vector<std::string> GetAcceptedFriends(const std::string& username);
     bool SaveMessage(const std::string& sender, const std::string& target, const std::string& text);
     std::vector<Message> GetChatHistory(const std::string& user1, const std::string& user2, int offset, int limit);
+    bool CreateGroup(const std::string& groupName, const std::vector<std::string>& members);
 
 private:
     PGconn* conn; 

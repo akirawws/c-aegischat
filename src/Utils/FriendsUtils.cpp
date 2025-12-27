@@ -2,9 +2,6 @@
 #include "Utils/Styles.h"
 #include "AuthProtocol.h"
 #include "Utils/Network.h"
-
-// Глобальная переменная или extern, где хранится имя текущего пользователя после логина
-// Тебе нужно убедиться, что при логине ты записываешь имя в эту переменную
 extern std::string userName;
 
 struct ModalContext {
@@ -56,7 +53,7 @@ LRESULT CALLBACK AddFriendWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         break;
     }
     case WM_COMMAND:
-        if (LOWORD(wParam) == 2) { // Кнопка ADD
+        if (LOWORD(wParam) == 2) {
             char buffer[64];
             GetWindowTextA(ctx->hEdit, buffer, 64);
             ctx->res->username = buffer;
@@ -123,13 +120,10 @@ bool SendFriendRequest(const std::string& username) {
     memset(&packet, 0, sizeof(FriendPacket));
     packet.type = PACKET_FRIEND_REQUEST;
     
-    // Копируем имя того, КОМУ шлем
     strncpy(packet.targetUsername, username.c_str(), sizeof(packet.targetUsername) - 1);
     
-    // Копируем имя того, КТО шлет (нас)
     strncpy(packet.senderUsername, userName.c_str(), sizeof(packet.senderUsername) - 1);
 
-    // Отправляем на сервер
     return send(clientSocket, (char*)&packet, sizeof(FriendPacket), 0) != SOCKET_ERROR;
 }
 

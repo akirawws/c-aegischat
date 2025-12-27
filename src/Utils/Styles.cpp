@@ -30,14 +30,10 @@ HFONT CreateInputFont(int size, int weight) {
 void DrawRoundedRect(HDC hdc, RECT r, COLORREF color, int radius) {
     HBRUSH brush = CreateSolidBrush(color);
     HPEN pen = CreatePen(PS_SOLID, 1, color);
-    
-    // Выбираем кисть и перо в контекст устройства, запоминая старые
+
     HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
     HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-
     RoundRect(hdc, r.left, r.top, r.right, r.bottom, radius, radius);
-
-    // Возвращаем старые объекты и удаляем созданные
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
     DeleteObject(brush);

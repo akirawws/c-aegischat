@@ -258,6 +258,36 @@ std::vector<std::string> Database::GetAcceptedFriends(const std::string& usernam
     PQclear(res);
     return friends;
 }
+
+bool Database::CreateGroup(const std::string& groupName, const std::vector<std::string>& members) {
+    if (!conn) return false;
+
+    PQexec(conn, "BEGIN");
+
+    const char* gName[1] = { groupName.c_str() };
+    PGresult* res = PQexecParams(conn, 
+        "INSERT INTO groups (name) VALUES ($1) RETURNING id", 
+        1, NULL, gName, NULL, NULL, 0);
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQexec(conn, "ROLLBACK"); PQclear(res); return false;
+    }
+    std::string groupId = PQgetvalue(res, 0, 0);
+    PQclear(res);
+
+    for (const auto& memberName : members) {
+        const char* params[2] = { groupId.c_str(), memberName.c_str() };
+        PGresult* mRes = PQexecParams(conn,
+            "INSERT INTO group_members (group_id, user_id) "
+            "SELECT $1, id FROM users WHERE username = $2",
+            2, NULL, params, NULL, NULL, 0);
+        PQclear(mRes);
+    }
+
+    PQexec(conn, "COMMIT");
+    return true;
+}
+
 bool Database::SaveMessage(const std::string& sender, const std::string& target, const std::string& text) {
     if (!conn) return false;
     const char* params[3] = { sender.c_str(), target.c_str(), text.c_str() };

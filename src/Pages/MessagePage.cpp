@@ -5,8 +5,6 @@
 #include <gdiplus.h>
 
 using namespace Gdiplus;
-
-// Глобальная переменная прокрутки
 extern int scrollPos; 
 
 #define COLOR_BG            RGB(49, 51, 56)

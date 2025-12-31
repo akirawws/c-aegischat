@@ -10,11 +10,15 @@
 #include <algorithm>
 #include <mutex>
 #include <map>
+#include <string>
+#include <iostream>
+
 
 std::map<std::string, std::vector<Message>> chatHistories;
 std::vector<Message> messages; 
 std::vector<DMUser> dmUsers;
 std::string activeChatUser = "";
+extern std::string userName;
 
 int g_historyOffset = 0;
 bool g_isLoadingHistory = false;
@@ -177,15 +181,21 @@ void ReceiveMessages() {
                 if (hMainWnd) InvalidateRect(hMainWnd, NULL, TRUE);
             }
         }
-        else if (packetType == PACKET_ROOM_LIST) {
-            RoomPacket rPkt;
-            rPkt.type = packetType;
-            if (ReceiveExact((char*)&rPkt + 1, sizeof(RoomPacket) - 1)) {
-                char name[65] = {0}; 
-                memcpy(name, rPkt.username, 64);
-                AddUserToDMList(hMainWnd, std::string(name), (rPkt.onlineStatus == 1));
-            }
+            else if (packetType == PACKET_ROOM_LIST) {
+                RoomPacket rPkt;
+                rPkt.type = packetType;
+                if (ReceiveExact((char*)&rPkt + 1, sizeof(RoomPacket) - 1)) {
+                    char name[65] = {0}; 
+                    memcpy(name, rPkt.username, 64);
+                    
+                    // Флаг isGroup: если это комната/группа, ставим true
+                    bool isGroup = (rPkt.onlineStatus == 2); // Например, статус 2 на сервере значит "группа"
+                    
+                    AddUserToDMList(hMainWnd, std::string(name), (rPkt.onlineStatus >= 1));
+                    
+                    if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
                 }
+            }
         else if (packetType == PACKET_USER_STATUS) {
             UserStatusPacket sPkt;
             sPkt.type = packetType;
@@ -203,36 +213,57 @@ void ReceiveMessages() {
         }
 
         if (packetType == PACKET_CHAT_MESSAGE) {
-            ChatMessagePacket cPkt;
+            ChatMessagePacket cPkt{};
+            cPkt.type = PACKET_CHAT_MESSAGE;
+
             if (ReceiveExact((char*)&cPkt + 1, sizeof(ChatMessagePacket) - 1)) {
+                std::cout << "[DEBUG] Received msg from: " << cPkt.senderUsername << std::endl;
+
                 std::string sender = cPkt.senderUsername;
-                std::string target = cPkt.targetUsername; 
-                
+                std::string target = cPkt.targetUsername;
+
                 Message m;
                 m.text = cPkt.content;
                 m.sender = sender;
                 m.isMine = (sender == userName);
                 m.timeStr = GetCurrentTimeStr();
+
                 std::string chatKey = (target == userName) ? sender : target;
 
                 chatHistories[chatKey].push_back(m);
 
                 if (g_uiState.activeChatUser == chatKey) {
                     messages.push_back(m);
-                    if (hMessageList) {
-                        InvalidateRect(hMessageList, NULL, TRUE);
-                        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                    InvalidateRect(hMessageList, NULL, TRUE);
+                    PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                }
+
+                InvalidateRect(hMainWnd, NULL, FALSE);
+            }
+        }
+
+        else if (packetType == PACKET_CREATE_GROUP) {
+                    CreateGroupPacket gPkt;
+                    gPkt.type = PACKET_CREATE_GROUP;
+                    
+                    if (ReceiveExact((char*)&gPkt + 1, sizeof(CreateGroupPacket) - 1)) {
+                        
+                        std::string gName = gPkt.groupName;
+                        if (gName.empty() || gName.length() < 2) {
+                            gName = "";
+                            for (int i = 0; i < gPkt.userCount; ++i) {
+                                gName += gPkt.members[i];
+                                if (i < gPkt.userCount - 1) gName += ", ";
+                            }
+                        }
+                        AddUserToDMList(hMainWnd, gName, true);
+                        
+                        if (hMainWnd) {
+                            InvalidateRect(hMainWnd, NULL, FALSE);
+                            UpdateWindow(hMainWnd);
+                        }
                     }
                 }
-                if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
-            }
-        }
-        else if (packetType == PACKET_CREATE_GROUP) {
-            CreateGroupPacket gPkt;
-            if (ReceiveExact((char*)&gPkt + 1, sizeof(CreateGroupPacket) - 1)) {
-                AddUserToDMList(hMainWnd, std::string(gPkt.groupName), true); 
-            }
-        }
             else if (packetType == PACKET_CHAT_HISTORY) {
                 ChatHistoryEntryPacket hPkt;
                 hPkt.type = packetType;
@@ -390,26 +421,50 @@ void RequestChatHistory(const std::string& target, int offset) {
     SendPacket((char*)&req, sizeof(HistoryRequestPacket));
 }
 
-void RequestCreateGroup(const std::vector<std::string>& members) {
-    #pragma pack(push, 1)
-    struct CreateGroupRequestPacket {
-        uint8_t type;
-        int count;
-        char memberList[10][64]; 
-    };
-    #pragma pack(pop)
-
-    CreateGroupRequestPacket pkt;
+void RequestCreateGroup(const std::vector<std::string>& selectedFriends) {
+    CreateGroupPacket pkt;
     memset(&pkt, 0, sizeof(pkt));
 
-    pkt.type = 11; 
-    pkt.count = (int)members.size();
+    pkt.type = PACKET_CREATE_GROUP;
 
-    for (int i = 0; i < pkt.count && i < 10; ++i) {
-        strncpy(pkt.memberList[i], members[i].c_str(), 63);
+    std::vector<std::string> allMembers;
+    allMembers.push_back(userName); 
+    for (const auto& friendName : selectedFriends) {
+        allMembers.push_back(friendName);
+    }
+
+    std::string autoGroupName = "";
+    for (size_t i = 0; i < allMembers.size(); ++i) {
+        autoGroupName += allMembers[i];
+        if (i < allMembers.size() - 1) {
+            autoGroupName += ","; 
+        }
+    }
+
+    if (autoGroupName.length() > 63) {
+        autoGroupName = autoGroupName.substr(0, 60) + "...";
+    }
+
+    strncpy(pkt.groupName, autoGroupName.c_str(), 63);
+    
+    pkt.userCount = (int)allMembers.size();
+    for (int i = 0; i < pkt.userCount && i < 10; ++i) {
+        strncpy(pkt.members[i], allMembers[i].c_str(), 63);
     }
 
     if (!SendPacket((char*)&pkt, sizeof(pkt))) {
-        MessageBoxA(NULL, "Не удалось отправить запрос на создание группы", "Ошибка сети", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, "Ошибка отправки запроса на создание группы", "Ошибка", MB_OK | MB_ICONERROR);
+    } else {
+        AddUserToDMList(hMainWnd, autoGroupName, true);
     }
+}
+
+void RequestUserRooms() {
+    if (!isConnected || clientSocket == INVALID_SOCKET) return;
+
+    // Создаем пустой пакет-запрос (допустим, тип 12 или используем существующий ROOM_LIST как запрос)
+    uint8_t type = PACKET_ROOM_LIST; 
+    SendPacket((char*)&type, 1); 
+    // Примечание: сервер должен быть настроен так, что если он получает 1 байт PACKET_ROOM_LIST, 
+    // он отправляет в ответ список всех групп пользователя.
 }

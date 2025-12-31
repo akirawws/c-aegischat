@@ -77,10 +77,10 @@ struct ChatHistoryEntryPacket {
 };
 
 struct CreateGroupPacket {
-    uint8_t type;
-    char groupName[64];
-    int userCount;
-    char members[10][64]; 
+    uint8_t type;           // Тип пакета
+    char groupName[64];     // Название группы (которое будет ID)
+    int userCount;          // Количество участников
+    char members[10][64];   // Список ников
 };
 
 #pragma pack(pop)

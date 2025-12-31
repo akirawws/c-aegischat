@@ -17,6 +17,7 @@ Database db;
 
 std::map<std::string, SOCKET> onlineUsers; 
 std::mutex users_mutex;
+
 bool ReceiveExact(SOCKET s, char* buf, int size) {
     int total = 0;
     while (total < size) {
@@ -45,7 +46,7 @@ void BroadcastStatusToFriends(const std::string& username, uint8_t status) {
 }
 
 void HandleClient(SOCKET client_socket) {
-    char buffer[1024]; // Увеличили буфер для безопасности
+    char buffer[1024]; 
     std::string currentUsername = ""; 
 
     while (true) {
@@ -83,6 +84,7 @@ void HandleClient(SOCKET client_socket) {
 
                     BroadcastStatusToFriends(currentUsername, 1);
 
+                    // Рассылка друзей
                     std::vector<std::string> friends = db.GetAcceptedFriends(currentUsername);
                     for (const auto& fName : friends) {
                         RoomPacket rPkt;
@@ -97,12 +99,32 @@ void HandleClient(SOCKET client_socket) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     }
 
+                    // --- ИНИЦИАЛИЗАЦИЯ ГРУПП ПРИ ВХОДЕ ---
+                    std::vector<std::string> userGroups = db.GetUserGroups(currentUsername);
+                    for (const auto& gName : userGroups) {
+                        CreateGroupPacket gPkt;
+                        gPkt.type = PACKET_CREATE_GROUP;
+                        memset(gPkt.groupName, 0, 64);
+                        strncpy(gPkt.groupName, gName.c_str(), 63);
+
+                        std::vector<std::string> members = db.GetGroupMembers(gName);
+                        gPkt.userCount = (int)members.size();
+                        for (int i = 0; i < gPkt.userCount && i < 10; ++i) {
+                            memset(gPkt.members[i], 0, 64);
+                            strncpy(gPkt.members[i], members[i].c_str(), 63);
+                        }
+                        send(client_socket, (char*)&gPkt, sizeof(CreateGroupPacket), 0);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+
+                    // Заявки в друзья
                     std::vector<std::string> pending = db.GetPendingRequests(currentUsername);
                     for (const auto& senderName : pending) {
                         FriendPacket fp = { PACKET_FRIEND_REQUEST };
                         strncpy(fp.senderUsername, senderName.c_str(), 63);
                         strncpy(fp.targetUsername, currentUsername.c_str(), 63);
                         send(client_socket, (char*)&fp, sizeof(FriendPacket), 0);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     }
                 } else {
                     strcpy(res.message, "Invalid credentials!");
@@ -135,38 +157,26 @@ void HandleClient(SOCKET client_socket) {
         }
         else if (packetType == PACKET_CHAT_HISTORY) {
             HistoryRequestPacket* req = (HistoryRequestPacket*)buffer;
-            std::cout << "[DEBUG] History request from " << currentUsername 
-                    << " for " << req->targetUsername << " offset " << req->offset << std::endl;
-
             std::vector<Message> history = db.GetChatHistory(currentUsername, req->targetUsername, req->offset, 50);
-            std::cout << "[DEBUG] Found messages: " << history.size() << std::endl;
-            // Если история пуста, нужно отправить хотя бы один пакет с isLast=true, 
-            // чтобы клиент убрал экран загрузки
+
             if (history.empty()) {
                 ChatHistoryEntryPacket emptyPkt = { PACKET_CHAT_HISTORY };
                 emptyPkt.isLast = true;
                 send(client_socket, (char*)&emptyPkt, sizeof(ChatHistoryEntryPacket), 0);
             } else {
-                // Отправляем сообщения от старых к новым (БД возвращает DESC, поэтому идем с конца вектора)
                 for (int i = (int)history.size() - 1; i >= 0; --i) {
                     ChatHistoryEntryPacket hPkt = { PACKET_CHAT_HISTORY };
-                    
                     strncpy(hPkt.senderUsername, history[i].sender.c_str(), 63);
                     strncpy(hPkt.content, history[i].text.c_str(), 511);
                     strncpy(hPkt.timestamp, history[i].timeStr.c_str(), 31);
-                    
-                    hPkt.isLast = (i == 0); // Последнее сообщение в цикле — флаг True
-                    
+                    hPkt.isLast = (i == 0); 
                     send(client_socket, (char*)&hPkt, sizeof(ChatHistoryEntryPacket), 0);
-                    
-                    // Небольшая пауза, чтобы не забить буфер сокета при большой истории
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
             }
         }
         else if (packetType == PACKET_CREATE_GROUP) {
             CreateGroupPacket* gPkt = (CreateGroupPacket*)buffer;
-            
             std::vector<std::string> memberList;
             memberList.push_back(currentUsername);
             for (int i = 0; i < gPkt->userCount; i++) {
@@ -174,7 +184,6 @@ void HandleClient(SOCKET client_socket) {
             }
 
             if (db.CreateGroup(gPkt->groupName, memberList)) {
-                std::cout << "[SERVER] Group created: " << gPkt->groupName << std::endl;
                 std::lock_guard<std::mutex> lock(users_mutex);
                 for (const auto& member : memberList) {
                     if (onlineUsers.count(member)) {
@@ -183,35 +192,84 @@ void HandleClient(SOCKET client_socket) {
                 }
             }
         }
+    else if (packetType == PACKET_CHAT_MESSAGE) {
+        std::cout << "\n[SERVER] ===== ПОЛУЧЕН PACKET_CHAT_MESSAGE =====" << std::endl;
+        
+        // Данные УЖЕ находятся в buffer, так как мы сделали recv в начале цикла.
+        // Накладываем структуру на буфер:
+        ChatMessagePacket* p = (ChatMessagePacket*)buffer;
 
-        else if (packetType == PACKET_CHAT_MESSAGE) {
-            ChatMessagePacket cPkt;
-            size_t packetSize = sizeof(ChatMessagePacket);
-            memcpy(&cPkt, buffer, (bytesReceived > packetSize ? packetSize : bytesReceived));
+        char sender[64] = {0};
+        char target[64] = {0};
+        char content[512] = {0};
+        
+        // Копируем данные из структуры
+        strncpy(sender, p->senderUsername, 63);
+        strncpy(target, p->targetUsername, 63);
+        strncpy(content, p->content, 511);
+        
+        std::cout << "[SERVER] Пакет извлечен из буфера:" << std::endl;
+        std::cout << "[SERVER] Отправитель: '" << sender << "'" << std::endl;
+        std::cout << "[SERVER] Получатель: '" << target << "'" << std::endl;
+        std::cout << "[SERVER] Содержимое: '" << content << "'" << std::endl;
+    
+    if (currentUsername == std::string(sender)) {
+        std::cout << "[SERVER] Проверка отправителя: OK (текущий пользователь совпадает с отправителем)" << std::endl;
+        
+        // Проверяем, группа ли это
+        bool isGroup = db.IsGroup(target);
+        std::cout << "[SERVER] Это группа? " << (isGroup ? "ДА" : "НЕТ") << std::endl;
+        
+        if (db.SaveMessage(sender, target, content)) {
+            std::cout << "[SERVER] Сообщение сохранено в БД" << std::endl;
             
-            int totalRead = bytesReceived;
-            while (totalRead < (int)packetSize) {
-                int extra = recv(client_socket, (char*)&cPkt + totalRead, (int)(packetSize - totalRead), 0);
-                if (extra <= 0) break;
-                totalRead += extra;
-            }
-
-            cPkt.senderUsername[63] = '\0';
-            cPkt.targetUsername[63] = '\0';
-            cPkt.content[sizeof(cPkt.content) - 1] = '\0';
-
-            if (currentUsername == cPkt.senderUsername) {
-                if (db.SaveMessage(cPkt.senderUsername, cPkt.targetUsername, cPkt.content)) {
-                    std::lock_guard<std::mutex> lock(users_mutex);
-                    if (onlineUsers.count(cPkt.targetUsername)) {
-                        send(onlineUsers[cPkt.targetUsername], (char*)&cPkt, sizeof(ChatMessagePacket), 0);
+            if (isGroup) {
+                std::vector<std::string> members = db.GetGroupMembers(target);
+                std::cout << "[SERVER] Члены группы (" << members.size() << "): ";
+                for (const auto& m : members) std::cout << m << " ";
+                std::cout << std::endl;
+                
+                // Создаем полный пакет для отправки другим участникам
+                ChatMessagePacket fullPkt;
+                fullPkt.type = PACKET_CHAT_MESSAGE;
+                strncpy(fullPkt.senderUsername, sender, 63);
+                strncpy(fullPkt.targetUsername, target, 63);
+                strncpy(fullPkt.content, content, 511);
+                
+                std::lock_guard<std::mutex> lock(users_mutex);
+                for (const auto& m : members) {
+                    if (m != currentUsername && onlineUsers.count(m)) {
+                        send(onlineUsers[m], (char*)&fullPkt, sizeof(ChatMessagePacket), 0);
+                        std::cout << "[SERVER] Отправлено участнику: " << m << std::endl;
                     }
                 }
+            } else {
+                // Создаем полный пакет для отправки получателю
+                ChatMessagePacket fullPkt;
+                fullPkt.type = PACKET_CHAT_MESSAGE;
+                strncpy(fullPkt.senderUsername, sender, 63);
+                strncpy(fullPkt.targetUsername, target, 63);
+                strncpy(fullPkt.content, content, 511);
+                
+                std::lock_guard<std::mutex> lock(users_mutex);
+                if (onlineUsers.count(target)) {
+                    send(onlineUsers[target], (char*)&fullPkt, sizeof(ChatMessagePacket), 0);
+                    std::cout << "[SERVER] Отправлено пользователю: " << target << std::endl;
+                }
             }
+        } else {
+            std::cout << "[SERVER ERROR] Не удалось сохранить сообщение в БД!" << std::endl;
         }
-    } 
+    } else {
+        std::cout << "[SERVER WARNING] Отправитель не совпадает с текущим пользователем!" << std::endl;
+        std::cout << "[SERVER WARNING] currentUsername: '" << currentUsername << "', sender: '" << sender << "'" << std::endl;
+    }
+    
+    std::cout << "[SERVER] ===== ОБРАБОТКА PACKET_CHAT_MESSAGE ЗАВЕРШЕНА =====\n" << std::endl;
+}
+}
+
     if (!currentUsername.empty()) {
-        std::cout << "[SERVER] User disconnecting: " << currentUsername << std::endl;
         BroadcastStatusToFriends(currentUsername, 0);
         std::lock_guard<std::mutex> lock(users_mutex);
         onlineUsers.erase(currentUsername);

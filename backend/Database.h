@@ -30,6 +30,10 @@ public:
     bool SaveMessage(const std::string& sender, const std::string& target, const std::string& text);
     std::vector<Message> GetChatHistory(const std::string& user1, const std::string& user2, int offset, int limit);
     bool CreateGroup(const std::string& groupName, const std::vector<std::string>& members);
+    std::vector<std::string> GetUserGroups(const std::string& username);
+    std::vector<std::string> GetGroupMembers(const std::string& groupName);
+    bool IsGroup(const std::string& targetName); 
+    std::string Trim(const std::string& s);
 
 private:
     PGconn* conn; 

@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <vector>
+
 enum class AppPage {
     Friends,
     Chat,
@@ -10,6 +12,10 @@ enum class AppPage {
 struct UIState {
     AppPage currentPage;
     std::string activeChatUser;
+    
+
+    std::string userDisplayName;
+    std::string userAvatarUrl;
 };
 struct DMUser {
     std::string username;

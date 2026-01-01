@@ -8,6 +8,32 @@
 #include <string>
 #include <algorithm>
 
+
+UserProfile Database::GetUserProfile(const std::string& username) {
+    UserProfile profile;
+    profile.username = username;
+
+    if (!conn) return profile;
+
+    const char* params[1] = { username.c_str() };
+    PGresult* res = PQexecParams(conn,
+        "SELECT COALESCE(display_name, username), COALESCE(avatar_url, '') "
+        "FROM users WHERE username = $1",
+        1, NULL, params, NULL, NULL, 0);
+
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        profile.display_name = PQgetvalue(res, 0, 0);
+        profile.avatar_url = PQgetvalue(res, 0, 1);
+    } else {
+        profile.display_name = username; // fallback
+    }
+
+    PQclear(res);
+    return profile;
+}
+
+
+
 std::vector<std::string> Database::GetGroupMembers(const std::string& groupName) {
     std::vector<std::string> members;
     

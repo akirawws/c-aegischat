@@ -14,5 +14,7 @@ extern HWND hActionBtn;
 extern HWND hSwitchBtn;
 HWND CreateAuthPage(HINSTANCE hInstance, int x, int y, int width, int height);
 LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void ToggleAuthMode(HWND hwnd);
+
 
 #endif 

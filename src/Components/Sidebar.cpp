@@ -21,11 +21,11 @@ using namespace Gdiplus;
 
 
 HWND hSidebar = NULL;
-static int g_activeIndex = 0;
-static int g_hoverIndex = -1;
+Gdiplus::Image* g_pMainIcon = NULL; 
+int g_activeIndex = 0;
+int g_hoverIndex = -1;
 static HWND hTooltip = NULL;
 static bool g_mouseTracking = false;
-static Gdiplus::Image* g_pMainIcon = NULL; 
 
 
 const Color CLR_SIDEBAR_BG(255, 30, 31, 34);

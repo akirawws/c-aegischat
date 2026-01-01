@@ -211,7 +211,7 @@ void ReceiveMessages() {
                 }
             }
         }
-
+        
         if (packetType == PACKET_CHAT_MESSAGE) {
             ChatMessagePacket cPkt{};
             cPkt.type = PACKET_CHAT_MESSAGE;
@@ -241,7 +241,35 @@ void ReceiveMessages() {
                 InvalidateRect(hMainWnd, NULL, FALSE);
             }
         }
+        else if (packetType == PACKET_USER_PROFILE) {
+            UserProfilePacket pPkt;
+            pPkt.type = packetType;
+            
+            // Считываем остальную часть пакета
+            if (ReceiveExact((char*)&pPkt + 1, sizeof(UserProfilePacket) - 1)) {
+                
+                // 1. Сохраняем Display Name (если он пустой, оставляем username)
+                std::string dName = pPkt.display_name;
+                if (!dName.empty()) {
+                    // g_uiState — ваше глобальное состояние интерфейса
+                    g_uiState.userDisplayName = dName;
+                } else {
+                    g_uiState.userDisplayName = pPkt.username;
+                }
 
+                // 2. Сохраняем URL аватара
+                g_uiState.userAvatarUrl = pPkt.avatar_url;
+
+                std::cout << "[DEBUG] Profile loaded: " << g_uiState.userDisplayName 
+                          << " Avatar: " << g_uiState.userAvatarUrl << std::endl;
+
+                // 3. Обновляем интерфейс (перерисовываем сайдбар)
+                if (hMainWnd) {
+                    InvalidateRect(hMainWnd, NULL, FALSE);
+                }
+            }
+        }
+        
         else if (packetType == PACKET_CREATE_GROUP) {
                     CreateGroupPacket gPkt;
                     gPkt.type = PACKET_CREATE_GROUP;

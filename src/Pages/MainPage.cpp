@@ -9,6 +9,7 @@
 #include "Pages/FriendsPage.h"
 #include "Pages/MessagePage.h"
 #include "Components/SidebarFriends.h"
+#include "Components/SidebarProfile.h"
 #include "Utils/Keyboard.h"
 #include "Utils/Network.h"
 #include "Utils/UIState.h"
@@ -21,6 +22,9 @@ extern std::map<std::string, std::vector<Message>> chatHistories;
 extern std::vector<Message> messages; 
 extern std::string activeChatUser; 
 extern std::vector<DMUser> dmUsers;
+extern Gdiplus::Image* g_pMainIcon;
+extern int g_activeIndex;
+extern int g_hoverIndex;
 
 HWND hMainWnd = NULL;
 const int SIDEBAR_ICONS = 72;
@@ -201,16 +205,44 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
-    case WM_CREATE: {
-            int startX = SIDEBAR_ICONS + SIDEBAR_DM;
-            
-            CreateSidebar(hwnd, 0, 0, SIDEBAR_ICONS, 1000); 
+    case WM_MOUSEMOVE: {
+    int x = LOWORD(lParam);
+    int y = HIWORD(lParam);
+    
+    int oldHover = g_hoverIndex;
+    if (x < SIDEBAR_ICONS) {
+        if (y >= 14 && y <= 58) g_hoverIndex = 0;
+        else if (y >= 80 && y <= 124) g_hoverIndex = 1;
+        else if (y >= 136 && y <= 180) g_hoverIndex = 2;
+        else g_hoverIndex = -1;
+    } else {
+        g_hoverIndex = -1;
+    }
 
+    if (oldHover != g_hoverIndex) {
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    break;
+}
+
+case WM_CREATE: {
+            int startX = SIDEBAR_ICONS + SIDEBAR_DM;
+
+            // ИНИЦИАЛИЗАЦИЯ ИКОНКИ САЙДБАРА
+            // Так как дочернее окно удалено, загружаем ресурс в главном окне
+            if (g_pMainIcon == NULL) {
+                g_pMainIcon = Gdiplus::Image::FromFile(L"assets/icon.png");
+                
+                // Проверка: если иконка не загрузилась, вы увидите сообщение в отладчике
+                if (g_pMainIcon && g_pMainIcon->GetLastStatus() != Gdiplus::Ok) {
+                    OutputDebugStringA("Aegis Error: Failed to load assets/icon.png\n");
+                }
+            }
 
             hMessageList = CreateWindowExA(
                 0, "MessageListWindow", NULL,
                 WS_CHILD | WS_VISIBLE | WS_VSCROLL, 
-                startX, 0, 100, 100, 
+                startX, 48, 100, 100, // Изменил y на 48, чтобы не перекрывать будущий хедер
                 hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL
             );
 
@@ -227,65 +259,96 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
-        case WM_LBUTTONDOWN: {
-                int x = LOWORD(lParam);
-                int y = HIWORD(lParam);
-                RECT rect;
-                GetClientRect(hwnd, &rect);
+ case WM_LBUTTONDOWN: {
+    int x = LOWORD(lParam);
+    int y = HIWORD(lParam);
+    RECT rect;
+    GetClientRect(hwnd, &rect);
 
-                if (g_uiState.currentPage == AppPage::Messages) {
-                    int btnX = rect.right - 50;
-                    int btnY = 9;
-                    if (x >= btnX && x <= btnX + 30 && y >= btnY && y <= btnY + 30) {
-                        OpenCreateGroupDialog(hwnd);
-                        return 0;
-                    }
-                } 
-                if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
-                    HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
-                    if (g_uiState.currentPage == AppPage::Messages) {
-                        messages = chatHistories[g_uiState.activeChatUser];
-                        ShowChatUI(true);
-                        if (hMessageList) {
-                            InvalidateRect(hMessageList, NULL, TRUE);
-                            PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
-                        }
-                    } else {
-                        ShowChatUI(false);
-                    }
-                    InvalidateRect(hwnd, NULL, FALSE);
-                    return 0;
-                } 
-            
-                if (g_uiState.currentPage == AppPage::Friends) {
-                    HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
-                    HandleFriendsClick(hwnd, x, y, hInstance);
-                    InvalidateRect(hwnd, NULL, FALSE);
-                }
-                
-                return 0;
+    // 1. Проверка клика по профилю (САМЫЙ ВЫСОКИЙ ПРИОРИТЕТ)
+    // Профиль теперь начинается от x = 0 и занимает ширину обеих колонок
+    if (IsClickOnProfile(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+        // Здесь логика открытия настроек профиля (если есть)
+        return 0; 
+    }
+
+    // 2. Логика клика по первой колонке (Иконки серверов)
+    if (x < SIDEBAR_ICONS) {
+        // Проверяем координаты иконок (примерные значения из Sidebar.cpp)
+        if (y >= 14 && y <= 58) g_activeIndex = 0;
+        else if (y >= 80 && y <= 124) g_activeIndex = 1;
+        
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    }
+
+    // 3. Логика клика по второй колонке (Список DM / Друзей)
+    if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
+        HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
+        
+        if (g_uiState.currentPage == AppPage::Messages) {
+            messages = chatHistories[g_uiState.activeChatUser];
+            ShowChatUI(true);
+            if (hMessageList) {
+                InvalidateRect(hMessageList, NULL, TRUE);
+                PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
             }
+        } else {
+            ShowChatUI(false);
+        }
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    } 
 
-    case WM_PAINT: {
+    // 4. Логика клика по хедеру (Кнопка создания группы)
+    if (g_uiState.currentPage == AppPage::Messages) {
+        int btnX = rect.right - 50;
+        int btnY = 9;
+        if (x >= btnX && x <= btnX + 30 && y >= btnY && y <= btnY + 30) {
+            OpenCreateGroupDialog(hwnd);
+            return 0;
+        }
+    } 
+
+    // 5. Логика клика по основному контенту (Страница друзей)
+    if (g_uiState.currentPage == AppPage::Friends) {
+        HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+        HandleFriendsClick(hwnd, x, y, hInstance);
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    
+    return 0;
+}
+
+case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rect;
         GetClientRect(hwnd, &rect);
 
+        // Двойная буферизация
         HDC memDC = CreateCompatibleDC(hdc);
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
         HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
+        // СЛОЙ 1: Общий фон
         HBRUSH hBg = CreateSolidBrush(RGB(32, 34, 37)); 
         FillRect(memDC, &rect, hBg);
         DeleteObject(hBg);
 
+        // СЛОЙ 2: Первый сайдбар (Иконки серверов)
+        // Рисуем функцию напрямую из Sidebar.cpp (нужно пробросить OnPaintSidebar)
+        OnPaintSidebar(memDC, SIDEBAR_ICONS, rect.bottom);
+
+        // СЛОЙ 3: Второй сайдбар (Список DM)
         DrawSidebarFriends(memDC, hwnd, SIDEBAR_ICONS, 0, SIDEBAR_DM, rect.bottom);
 
+        // СЛОЙ 4: Основной контент (Страница или Чат)
         if (g_uiState.currentPage == AppPage::Friends) {
             DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
         } 
         else if (g_uiState.currentPage == AppPage::Messages) {
+            // Фон хедера
             HBRUSH hHeaderBr = CreateSolidBrush(RGB(49, 51, 56));
             RECT headerRect = { SIDEBAR_ICONS + SIDEBAR_DM, 0, rect.right, 48 };
             FillRect(memDC, &headerRect, hHeaderBr);
@@ -294,34 +357,38 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             Graphics gHeader(memDC);
             gHeader.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
 
+            // Текст хедера
             std::wstring title = Utf8ToWide(g_uiState.activeChatUser);
-
             FontFamily fontFamily(L"Segoe UI");
             Font headerFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-            SolidBrush whiteBrush(Color(255, 255, 255, 255));
-
+            SolidBrush whiteBrush(Color(255, 255, 255));
             gHeader.DrawString(title.c_str(), -1, &headerFont, 
-                            PointF((REAL)headerRect.left + 20, 14.0f), 
-                            &whiteBrush);
+                               PointF((REAL)headerRect.left + 20, 14.0f), &whiteBrush);
 
-            int btnSize = 30;
-            int btnX = rect.right - 50;
-            int btnY = 9;
-            RectF btnRect((REAL)btnX, (REAL)btnY, (REAL)btnSize, (REAL)btnSize);
-
-            bool isHovered = (hoveredIndex == 999); 
-            SolidBrush btnBrush(isHovered ? Color(255, 78, 80, 88) : Color(255, 59, 61, 68));
+            // Кнопка "+"
+            RectF btnRect((REAL)rect.right - 50, 9.0f, 30.0f, 30.0f);
+            SolidBrush btnBrush((hoveredIndex == 999) ? Color(255, 78, 80, 88) : Color(255, 59, 61, 68));
             gHeader.FillEllipse(&btnBrush, btnRect);
-
-            SolidBrush plusBrush(Color(255, 220, 221, 222));
+            
             Font plusFont(&fontFamily, 18, FontStyleRegular, UnitPixel);
             StringFormat sf;
             sf.SetAlignment(StringAlignmentCenter);
             sf.SetLineAlignment(StringAlignmentCenter);
-            gHeader.DrawString(L"+", -1, &plusFont, btnRect, &sf, &plusBrush);
-
+            gHeader.DrawString(L"+", -1, &plusFont, btnRect, &sf, &whiteBrush);
         }
 
+        // СЛОЙ 5 (ВЕРХНИЙ): Панель профиля
+        // Рисуем в самом конце, чтобы перекрыть НИЗ обоих сайдбаров
+        {
+            Graphics gUI(memDC);
+            gUI.SetSmoothingMode(SmoothingModeAntiAlias);
+            gUI.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+
+            int totalSidebarWidth = SIDEBAR_ICONS + SIDEBAR_DM;
+            DrawSidebarProfile(gUI, 0, rect.bottom, totalSidebarWidth, "AdminUser");
+        }
+
+        // Вывод на экран
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
 
         SelectObject(memDC, oldBitmap);
@@ -330,8 +397,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         EndPaint(hwnd, &ps);
         break;
     }
-
-
     case WM_SIZE: {
             int width  = LOWORD(lParam);
             int height = HIWORD(lParam);

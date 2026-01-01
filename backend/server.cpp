@@ -98,7 +98,24 @@ void HandleClient(SOCKET client_socket) {
                         send(client_socket, (char*)&rPkt, sizeof(RoomPacket), 0);
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     }
+                    UserProfile profile = db.GetUserProfile(currentUsername); 
+                    
+                    UserProfilePacket pPkt;
+                    pPkt.type = PACKET_USER_PROFILE;
+                    memset(pPkt.username, 0, 64);
+                    memset(pPkt.display_name, 0, 64);
+                    memset(pPkt.avatar_url, 0, 256);
 
+                    strncpy(pPkt.username, currentUsername.c_str(), 63);
+                    strncpy(pPkt.display_name, profile.display_name.c_str(), 63);
+                    strncpy(pPkt.avatar_url, profile.avatar_url.c_str(), 255);
+
+                    send(client_socket, (char*)&pPkt, sizeof(UserProfilePacket), 0);
+                    std::cout << "[SERVER] Профиль отправлен: " << profile.display_name << std::endl;
+                    // ------------------------------------
+
+                    BroadcastStatusToFriends(currentUsername, 1);
+                    
                     // --- ИНИЦИАЛИЗАЦИЯ ГРУПП ПРИ ВХОДЕ ---
                     std::vector<std::string> userGroups = db.GetUserGroups(currentUsername);
                     for (const auto& gName : userGroups) {

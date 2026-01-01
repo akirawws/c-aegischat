@@ -12,7 +12,11 @@ struct Message {
     std::string timeStr;
     bool isMine;
 };
-
+struct UserProfile {
+    std::string username;
+    std::string display_name;
+    std::string avatar_url;
+};
 class Database {
 public:
     Database();
@@ -34,6 +38,7 @@ public:
     std::vector<std::string> GetGroupMembers(const std::string& groupName);
     bool IsGroup(const std::string& targetName); 
     std::string Trim(const std::string& s);
+    UserProfile GetUserProfile(const std::string& username);
 
 private:
     PGconn* conn; 

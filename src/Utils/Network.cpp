@@ -188,8 +188,7 @@ void ReceiveMessages() {
                     char name[65] = {0}; 
                     memcpy(name, rPkt.username, 64);
                     
-                    // Флаг isGroup: если это комната/группа, ставим true
-                    bool isGroup = (rPkt.onlineStatus == 2); // Например, статус 2 на сервере значит "группа"
+                    bool isGroup = (rPkt.onlineStatus == 2); 
                     
                     AddUserToDMList(hMainWnd, std::string(name), (rPkt.onlineStatus >= 1));
                     
@@ -245,25 +244,20 @@ void ReceiveMessages() {
             UserProfilePacket pPkt;
             pPkt.type = packetType;
             
-            // Считываем остальную часть пакета
             if (ReceiveExact((char*)&pPkt + 1, sizeof(UserProfilePacket) - 1)) {
                 
-                // 1. Сохраняем Display Name (если он пустой, оставляем username)
                 std::string dName = pPkt.display_name;
                 if (!dName.empty()) {
-                    // g_uiState — ваше глобальное состояние интерфейса
                     g_uiState.userDisplayName = dName;
                 } else {
                     g_uiState.userDisplayName = pPkt.username;
                 }
 
-                // 2. Сохраняем URL аватара
                 g_uiState.userAvatarUrl = pPkt.avatar_url;
 
                 std::cout << "[DEBUG] Profile loaded: " << g_uiState.userDisplayName 
                           << " Avatar: " << g_uiState.userAvatarUrl << std::endl;
 
-                // 3. Обновляем интерфейс (перерисовываем сайдбар)
                 if (hMainWnd) {
                     InvalidateRect(hMainWnd, NULL, FALSE);
                 }
@@ -490,9 +484,6 @@ void RequestCreateGroup(const std::vector<std::string>& selectedFriends) {
 void RequestUserRooms() {
     if (!isConnected || clientSocket == INVALID_SOCKET) return;
 
-    // Создаем пустой пакет-запрос (допустим, тип 12 или используем существующий ROOM_LIST как запрос)
     uint8_t type = PACKET_ROOM_LIST; 
     SendPacket((char*)&type, 1); 
-    // Примечание: сервер должен быть настроен так, что если он получает 1 байт PACKET_ROOM_LIST, 
-    // он отправляет в ответ список всех групп пользователя.
 }

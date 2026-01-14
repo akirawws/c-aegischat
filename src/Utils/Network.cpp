@@ -5,7 +5,7 @@
 #include "Components/SidebarFriends.h"
 #include "AuthProtocol.h" 
 #include "Pages/FriendsPage.h"
-
+#include "Components/MessageList.h"
 #include <ws2tcpip.h>
 #include <vector>
 #include <algorithm>
@@ -118,10 +118,10 @@ void ParseMessage(const std::string& msg) {
     
     messages.push_back(m);
 
-    if (hMessageList) {
-        InvalidateRect(hMessageList, NULL, TRUE);
-        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
-    }
+        if (hMessageList) {
+            InvalidateRect(hMessageList, NULL, TRUE);
+            ScrollMessagesToBottom();
+        }
 }
 bool SendPacket(const char* data, int size) {
     if (clientSocket == INVALID_SOCKET || !isConnected) {
@@ -304,16 +304,16 @@ void ReceiveMessages() {
                 m.timeStr = hPkt.timestamp;
                 m.isMine = (m.sender == userName);
 
-                // Вставляем в начало, чтобы порядок был правильный
+                // Вставляем в начало кэша, чтобы порядок был правильный
                 cache.messages.insert(cache.messages.begin(), m);
 
-                // Если чат открыт, обновляем messages для отображения
+                // Если чат открыт, вставляем в messages
                 if (g_uiState.activeChatUser == g_uiState.activeChatUser) {
                     messages.insert(messages.begin(), m);
-                    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
+                    InvalidateRect(hMessageList, NULL, TRUE);
                 }
 
-                // Если это последнее сообщение истории
+                // Когда загружено последнее сообщение истории
                 if (hPkt.isLast) {
                     g_isLoadingHistory = false;
                     cache.fullyLoaded = true;
@@ -321,11 +321,15 @@ void ReceiveMessages() {
                     if (hMessageList) {
                         InvalidateRect(hMessageList, NULL, TRUE);
                         UpdateWindow(hMessageList);
+                        ScrollMessagesToBottom();
+
+                        // Скроллим вниз после полной загрузки
                         PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
                     }
                 }
             }
         }
+
 
         else if (packetType == PACKET_FRIEND_ACCEPT) {
             FriendActionPacket aPkt;
@@ -385,7 +389,7 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
         }
 
         InvalidateRect(hMessageList, NULL, TRUE);
-    
+        ScrollMessagesToBottom(); 
         if (hMainWnd) {
             InvalidateRect(hMainWnd, NULL, FALSE); 
             UpdateWindow(hMainWnd);

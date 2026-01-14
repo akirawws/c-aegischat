@@ -3510,3 +3510,64 @@
 [20:47:29] Creating main window...
 [20:47:29] Main window created successfully. Handle: 2164664
 [20:47:29] Showing main window...
+[20:52:02] --- APP END ---
+[20:52:48] --- APP START ---
+[20:52:48] Registering class: AuthWindow
+[20:52:48] Class AuthWindow registered successfully.
+[20:52:48] Registering class: MainWindow
+[20:52:48] Class MainWindow registered successfully.
+[20:52:48] Registering class: SidebarWindow
+[20:52:48] Class SidebarWindow registered successfully.
+[20:52:48] Registering class: MessageListWindow
+[20:52:48] Class MessageListWindow registered successfully.
+[20:53:07] --- APP START ---
+[20:53:07] Registering class: AuthWindow
+[20:53:07] Class AuthWindow registered successfully.
+[20:53:07] Registering class: MainWindow
+[20:53:07] Class MainWindow registered successfully.
+[20:53:07] Registering class: SidebarWindow
+[20:53:07] Class SidebarWindow registered successfully.
+[20:53:07] Registering class: MessageListWindow
+[20:53:07] Class MessageListWindow registered successfully.
+[20:53:12] User logged in: admin
+[20:53:12] Creating main window...
+[20:53:12] Main window created successfully. Handle: 1575382
+[20:53:12] Showing main window...
+[20:56:09] --- APP END ---
+[20:56:52] --- APP START ---
+[20:56:52] Registering class: AuthWindow
+[20:56:52] Class AuthWindow registered successfully.
+[20:56:52] Registering class: MainWindow
+[20:56:52] Class MainWindow registered successfully.
+[20:56:52] Registering class: SidebarWindow
+[20:56:52] Class SidebarWindow registered successfully.
+[20:56:52] Registering class: MessageListWindow
+[20:56:52] Class MessageListWindow registered successfully.
+[20:56:59] User logged in: admin
+[20:56:59] Creating main window...
+[20:56:59] Main window created successfully. Handle: 10291640
+[20:56:59] Showing main window...
+[20:57:28] --- APP END ---
+[21:08:18] --- APP START ---
+[21:08:18] Registering class: AuthWindow
+[21:08:18] Class AuthWindow registered successfully.
+[21:08:18] Registering class: MainWindow
+[21:08:18] Class MainWindow registered successfully.
+[21:08:18] Registering class: SidebarWindow
+[21:08:18] Class SidebarWindow registered successfully.
+[21:08:18] Registering class: MessageListWindow
+[21:08:18] Class MessageListWindow registered successfully.
+[21:08:49] --- APP END ---
+[21:09:27] --- APP START ---
+[21:09:27] Registering class: AuthWindow
+[21:09:27] Class AuthWindow registered successfully.
+[21:09:27] Registering class: MainWindow
+[21:09:27] Class MainWindow registered successfully.
+[21:09:27] Registering class: SidebarWindow
+[21:09:27] Class SidebarWindow registered successfully.
+[21:09:27] Registering class: MessageListWindow
+[21:09:27] Class MessageListWindow registered successfully.
+[21:09:32] User logged in: admin
+[21:09:32] Creating main window...
+[21:09:32] Main window created successfully. Handle: 5768128
+[21:09:32] Showing main window...

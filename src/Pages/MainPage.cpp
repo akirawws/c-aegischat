@@ -16,9 +16,10 @@
 #include <vector>
 #include <commctrl.h>
 #include <gdiplus.h>
+#include <Utils/Utils.h>
 using namespace Gdiplus; 
 
-extern std::map<std::string, std::vector<Message>> chatHistories;
+extern std::map<std::string, ChatCache> chatHistories;
 extern std::vector<Message> messages; 
 extern std::string activeChatUser; 
 extern std::vector<DMUser> dmUsers;
@@ -287,7 +288,7 @@ case WM_CREATE: {
         HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
         
         if (g_uiState.currentPage == AppPage::Messages) {
-            messages = chatHistories[g_uiState.activeChatUser];
+            messages = chatHistories[g_uiState.activeChatUser].messages;
             ShowChatUI(true);
             if (hMessageList) {
                 InvalidateRect(hMessageList, NULL, TRUE);

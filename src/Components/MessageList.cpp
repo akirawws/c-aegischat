@@ -10,7 +10,7 @@
 using namespace Gdiplus;
 
 HWND hMessageList = NULL;
-extern std::map<std::string, std::vector<Message>> chatHistories;
+extern std::map<std::string, ChatCache> chatHistories;
 extern UIState g_uiState;
 int scrollPos = 0;
 
@@ -50,7 +50,7 @@ void DrawDiscordMessage(Graphics& g, const Message& msg, int& y, int w, bool isS
         RectF avatarRect((REAL)avatarMargin, (REAL)y, (REAL)avatarSize, (REAL)avatarSize);
         g.DrawString(letter.c_str(), -1, &letterFont, avatarRect, &sf, &whiteBrush);
 
-        g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
         Font nameFont(&fontFamily, 16, FontStyleBold, UnitPixel);
         SolidBrush nameBrush(DC_COLOR_USERNAME);
         g.DrawString(wSender.c_str(), -1, &nameFont, PointF((REAL)contentLeft, (REAL)y - 2), &nameBrush);
@@ -65,7 +65,7 @@ void DrawDiscordMessage(Graphics& g, const Message& msg, int& y, int w, bool isS
 
         y += 22; 
     }
-    g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
     Font msgFont(&fontFamily, 15, FontStyleRegular, UnitPixel);
     SolidBrush msgBrush(DC_COLOR_TEXT_MAIN);
     RectF textLayout((REAL)contentLeft, (REAL)y, (REAL)w - contentLeft - 40, 10000.0f);
@@ -94,9 +94,10 @@ LRESULT CALLBACK MessageListWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             HGDIOBJ oldBm = SelectObject(memDC, memBm);
             Graphics g(memDC);
             g.SetSmoothingMode(SmoothingModeAntiAlias);
-            g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
             g.Clear(DC_COLOR_BG);
-            auto& currentMsgs = chatHistories[g_uiState.activeChatUser];
+            auto& cache = chatHistories[g_uiState.activeChatUser];
+            auto& currentMsgs = cache.messages;
             int drawY = 20 - scrollPos;
 
             for (size_t i = 0; i < currentMsgs.size(); ++i) {

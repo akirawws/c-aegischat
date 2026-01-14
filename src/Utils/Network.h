@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 #include <Pages/FriendsPage.h>
+#include "Utils/Utils.h" 
+#include <map>
 
 
 extern SOCKET clientSocket;
@@ -19,9 +21,9 @@ extern std::thread receiveThread;
 extern std::string userName;
 extern std::string currentUserName;
 extern std::string userAvatar;
-
+extern std::map<std::string, ChatCache> chatHistories; 
+extern std::vector<Message> messages;  
 extern HWND ghWnd;
-
 
 bool ConnectToServer(const std::string& address, const std::string& port);
 void ReceiveMessages();

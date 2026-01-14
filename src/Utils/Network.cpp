@@ -5,6 +5,7 @@
 #include "Components/SidebarFriends.h"
 #include "AuthProtocol.h" 
 #include "Pages/FriendsPage.h"
+
 #include <ws2tcpip.h>
 #include <vector>
 #include <algorithm>
@@ -14,11 +15,11 @@
 #include <iostream>
 
 
-std::map<std::string, std::vector<Message>> chatHistories;
 std::vector<Message> messages; 
 std::vector<DMUser> dmUsers;
 std::string activeChatUser = "";
 extern std::string userName;
+std::map<std::string, ChatCache> chatHistories;
 
 int g_historyOffset = 0;
 bool g_isLoadingHistory = false;
@@ -216,8 +217,6 @@ void ReceiveMessages() {
             cPkt.type = PACKET_CHAT_MESSAGE;
 
             if (ReceiveExact((char*)&cPkt + 1, sizeof(ChatMessagePacket) - 1)) {
-                std::cout << "[DEBUG] Received msg from: " << cPkt.senderUsername << std::endl;
-
                 std::string sender = cPkt.senderUsername;
                 std::string target = cPkt.targetUsername;
 
@@ -229,17 +228,24 @@ void ReceiveMessages() {
 
                 std::string chatKey = (target == userName) ? sender : target;
 
-                chatHistories[chatKey].push_back(m);
+                // Получаем или создаём кэш чата
+                ChatCache& cache = chatHistories[chatKey];
+                cache.messages.push_back(m);
 
                 if (g_uiState.activeChatUser == chatKey) {
                     messages.push_back(m);
-                    InvalidateRect(hMessageList, NULL, TRUE);
-                    PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                    if (hMessageList) {
+                        InvalidateRect(hMessageList, NULL, TRUE);
+                        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                    }
                 }
 
-                InvalidateRect(hMainWnd, NULL, FALSE);
+                if (hMainWnd) {
+                    InvalidateRect(hMainWnd, NULL, FALSE);
+                }
             }
         }
+
         else if (packetType == PACKET_USER_PROFILE) {
             UserProfilePacket pPkt;
             pPkt.type = packetType;
@@ -286,41 +292,41 @@ void ReceiveMessages() {
                         }
                     }
                 }
-            else if (packetType == PACKET_CHAT_HISTORY) {
-                ChatHistoryEntryPacket hPkt;
-                hPkt.type = packetType;
-                if (ReceiveExact((char*)&hPkt + 1, sizeof(ChatHistoryEntryPacket) - 1)) {
-                    static bool needsClear = true; 
+        else if (packetType == PACKET_CHAT_HISTORY) {
+            ChatHistoryEntryPacket hPkt;
+            hPkt.type = packetType;
+            if (ReceiveExact((char*)&hPkt + 1, sizeof(ChatHistoryEntryPacket) - 1)) {
+                ChatCache& cache = chatHistories[g_uiState.activeChatUser];
 
-                    if (needsClear) {
-                        chatHistories[g_uiState.activeChatUser].clear();
-                        messages.clear(); 
-                        needsClear = false;
-                    }
+                Message m;
+                m.text = hPkt.content;
+                m.sender = hPkt.senderUsername;
+                m.timeStr = hPkt.timestamp;
+                m.isMine = (m.sender == userName);
 
-                    Message m;
-                    m.text = std::string(hPkt.content);
-                    m.sender = hPkt.senderUsername;
-                    m.timeStr = hPkt.timestamp;
-                    m.isMine = (m.sender == userName);
-                    chatHistories[g_uiState.activeChatUser].push_back(m);
-                    messages.push_back(m);
+                // Вставляем в начало, чтобы порядок был правильный
+                cache.messages.insert(cache.messages.begin(), m);
+
+                // Если чат открыт, обновляем messages для отображения
+                if (g_uiState.activeChatUser == g_uiState.activeChatUser) {
+                    messages.insert(messages.begin(), m);
+                    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
+                }
+
+                // Если это последнее сообщение истории
+                if (hPkt.isLast) {
+                    g_isLoadingHistory = false;
+                    cache.fullyLoaded = true;
+
                     if (hMessageList) {
-                        InvalidateRect(hMessageList, NULL, FALSE);
-                    }
-
-                    if (hPkt.isLast) {
-                        g_isLoadingHistory = false;
-                        needsClear = true; 
-                        
-                        if (hMessageList) {
-                            InvalidateRect(hMessageList, NULL, TRUE);
-                            UpdateWindow(hMessageList);
-                            PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
-                        }
+                        InvalidateRect(hMessageList, NULL, TRUE);
+                        UpdateWindow(hMessageList);
+                        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
                     }
                 }
             }
+        }
+
         else if (packetType == PACKET_FRIEND_ACCEPT) {
             FriendActionPacket aPkt;
             aPkt.type = packetType;
@@ -372,7 +378,7 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
         m.isMine = true;
         m.time = GetCurrentTimeStr();
 
-        chatHistories[target].push_back(m);
+        chatHistories[target].messages.push_back(m);
 
         if (g_uiState.activeChatUser == target) {
             messages.push_back(m);   
@@ -417,7 +423,7 @@ void SendPrivateMessageFromUI() {
         m.isMine = true;
         m.timeStr = GetCurrentTimeStr();
         UpdateUserActivity(g_uiState.activeChatUser);
-        chatHistories[g_uiState.activeChatUser].push_back(m);
+        chatHistories[g_uiState.activeChatUser].messages.push_back(m);
         messages.push_back(m); 
 
         SetWindowTextW(hInputEdit, L"");
@@ -431,17 +437,24 @@ void SendPrivateMessageFromUI() {
 }
 void RequestChatHistory(const std::string& target, int offset) {
     if (!isConnected || target.empty() || g_isLoadingHistory) return;
-    g_historyOffset = offset; 
+
+    ChatCache& cache = chatHistories[target];
+
+    // Если весь чат уже загружен, не делаем запрос
+    if (cache.fullyLoaded) return;
+
+    g_historyOffset = offset;
     g_isLoadingHistory = true;
 
-    HistoryRequestPacket req;
+    HistoryRequestPacket req{};
     req.type = PACKET_CHAT_HISTORY;
     req.offset = offset;
-    memset(req.targetUsername, 0, 64);
-    strncpy(req.targetUsername, target.c_str(), 63);
+    memset(req.targetUsername, 0, sizeof(req.targetUsername));
+    strncpy(req.targetUsername, target.c_str(), sizeof(req.targetUsername) - 1);
 
-    SendPacket((char*)&req, sizeof(HistoryRequestPacket));
+    SendPacket((char*)&req, sizeof(req));
 }
+
 
 void RequestCreateGroup(const std::vector<std::string>& selectedFriends) {
     CreateGroupPacket pkt;

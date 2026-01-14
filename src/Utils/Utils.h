@@ -13,6 +13,12 @@ struct Message {
     bool isUser = false;        
     std::string timeStr;        
 };
+struct ChatCache {
+    std::vector<Message> messages;
+    int oldestOffset = 0;
+    bool fullyLoaded = false;
+};
+
 
 std::string GetAvatar(const std::string& name);
 std::string GetCurrentTimeStr();

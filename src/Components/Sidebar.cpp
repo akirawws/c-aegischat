@@ -28,12 +28,12 @@ static HWND hTooltip = NULL;
 static bool g_mouseTracking = false;
 
 
-const Color CLR_SIDEBAR_BG(255, 30, 31, 34);
-const Color CLR_ITEM_BG(255, 49, 51, 56);
-const Color CLR_BLURPLE(255, 88, 101, 242);
+const Color CLR_SIDEBAR_BG(255, 26, 22, 26);
+const Color CLR_ITEM_BG(255, 48, 40, 44);
+const Color CLR_BLURPLE(255, 180, 70, 80);
 const Color CLR_GREEN(255, 35, 165, 89);
 const Color CLR_WHITE(255, 255, 255);
-const Color CLR_SEP(255, 45, 47, 51);
+const Color CLR_SEP(255, 52, 44, 48);
 
 const std::wstring g_tooltips[] = { L"Главная", L"Developer Blog", L"Добавить сервер" };
 

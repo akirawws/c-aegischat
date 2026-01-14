@@ -7,9 +7,9 @@
 using namespace Gdiplus;
 extern int scrollPos; 
 
-#define COLOR_BG            RGB(49, 51, 56)
+#define COLOR_BG            RGB(50, 42, 46)
 #define COLOR_TEXT_MAIN     RGB(219, 222, 225)
 #define COLOR_TEXT_MUTED    RGB(148, 155, 164)
 #define COLOR_USERNAME      RGB(255, 255, 255)
-#define COLOR_AVATAR_BG     RGB(88, 101, 242)
+#define COLOR_AVATAR_BG     RGB(180, 70, 80)
 

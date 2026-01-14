@@ -15,7 +15,6 @@ int GetMessageHeight(const Message& msg, int width);
 void DrawMessage(HDC hdc, const Message& msg, int y, int width);
 void OnPaintMessageList(HDC hdc, int width, int height);
 LRESULT CALLBACK MessageListWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void ScrollMessagesToBottom();
 
 #endif
 

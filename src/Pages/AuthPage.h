@@ -12,6 +12,7 @@ extern HWND hPassConfirmEdit;
 extern HWND hRememberCheck;
 extern HWND hActionBtn;
 extern HWND hSwitchBtn;
+extern HWND hQuickLoginBtn;
 HWND CreateAuthPage(HINSTANCE hInstance, int x, int y, int width, int height);
 LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void ToggleAuthMode(HWND hwnd);

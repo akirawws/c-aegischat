@@ -13,7 +13,7 @@ echo           BUILDING AEGIS CLIENT PROJECT
 echo ======================================================
 echo.
 
-set SOURCES=client_gui.cpp Utils/Styles.cpp Utils/Utils.cpp Utils/Network.cpp Utils/Keyboard.cpp Utils/HashPassword.cpp Utils/FriendsUtils.cpp Utils/UIState.cpp Components/MessageInput.cpp Components/Sidebar.cpp Components/MessageList.cpp Components/SidebarFriends.cpp Components/SidebarProfile.cpp Pages/AuthPage.cpp Pages/MainPage.cpp Pages/FriendsPage.cpp Pages/MessagePage.cpp
+set SOURCES=client_gui.cpp Utils/Styles.cpp Utils/Utils.cpp Utils/Network.cpp Utils/Keyboard.cpp Utils/HashPassword.cpp Utils/FriendsUtils.cpp Utils/UIState.cpp Utils/ConfigUtils.cpp Components/MessageInput.cpp Components/Sidebar.cpp Components/MessageList.cpp Components/SidebarFriends.cpp Components/SidebarProfile.cpp Pages/AuthPage.cpp Pages/MainPage.cpp Pages/FriendsPage.cpp Pages/MessagePage.cpp
 
 set OBJECTS=
 echo [1/2] Compiling source files...

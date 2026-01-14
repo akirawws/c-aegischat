@@ -10,7 +10,6 @@
 #include "Pages/MessagePage.h"
 #include "Components/SidebarFriends.h"
 #include "Components/SidebarProfile.h"
-#include "Components/MessageList.h"
 #include "Utils/Keyboard.h"
 #include "Utils/Network.h"
 #include "Utils/UIState.h"
@@ -36,9 +35,6 @@ static int hoveredIndex = -1;
 extern int inputEditHeight;
 extern HWND hInputEdit; 
 extern HWND hMessageList;
-int g_scrollOffset = 0;          
-int g_totalMessageHeight = 0;    
-const int MESSAGE_HEIGHT = 24;   
 
 LRESULT CALLBACK MessageInputSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (uMsg == WM_CHAR && wParam == VK_RETURN) {
@@ -62,7 +58,6 @@ HWND CreateMainPage(HINSTANCE hInstance, int x, int y, int width, int height) {
 }
 
 void OpenAddMembersDialog(HWND parent) {}
-
 
 
 void CenterWindow(HWND hwnd, HWND hwndParent) {
@@ -297,7 +292,7 @@ case WM_CREATE: {
             ShowChatUI(true);
             if (hMessageList) {
                 InvalidateRect(hMessageList, NULL, TRUE);
-                ScrollMessagesToBottom();
+                PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
             }
         } else {
             ShowChatUI(false);
@@ -421,14 +416,6 @@ case WM_PAINT: {
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
-        case WM_MOUSEWHEEL: {
-    short delta = GET_WHEEL_DELTA_WPARAM(wParam);
-    g_scrollOffset -= delta; // прокрутка вверх-вниз
-    g_scrollOffset = std::max(0, std::min(g_scrollOffset, std::max(0, g_totalMessageHeight - (HIWORD(lParam) - LOWORD(lParam)))));
-    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
-    break;
-}
-
 
     case WM_CTLCOLOREDIT: {
             HDC hdcEdit = (HDC)wParam;

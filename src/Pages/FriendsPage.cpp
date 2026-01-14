@@ -24,7 +24,7 @@ std::mutex pendingMutex;
 
 #define COLOR_GREEN         RGB(67, 181, 129)
 #define COLOR_RED           RGB(240, 71, 71)
-#define COLOR_BUTTON        RGB(88, 101, 242)
+#define COLOR_BUTTON        RGB(180, 70, 80)
 
 
 void DrawCenteredText(HDC hdc, const wchar_t* text, RECT r, COLORREF color, HFONT font) {

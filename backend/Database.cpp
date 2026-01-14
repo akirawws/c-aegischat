@@ -471,43 +471,17 @@ bool Database::IsGroup(const std::string& name) {
     std::string cleanName = Trim(name);
     if (cleanName.empty()) return false;
     
-    std::cout << "[DB IsGroup] Проверяем: '" << cleanName << "'" << std::endl;
+    const char* param[1] = { cleanName.c_str() };
+    PGresult* res = PQexecParams(conn, 
+        "SELECT 1 FROM groups WHERE name = $1", 
+        1, NULL, param, NULL, NULL, 0);
     
-    // Ищем точное совпадение
-    const char* exactParam[1] = { cleanName.c_str() };
-    PGresult* resExact = PQexecParams(conn, 
-        "SELECT id FROM groups WHERE name = $1", 
-        1, NULL, exactParam, NULL, NULL, 0);
+    bool isGroup = (PQntuples(res) > 0);
+    PQclear(res);
     
-    int exactCount = PQntuples(resExact);
-    if (exactCount > 0) {
-        std::cout << "[DB IsGroup] Найдено точное совпадение, ID: " << PQgetvalue(resExact, 0, 0) << std::endl;
-        PQclear(resExact);
-        return true;
-    }
-    PQclear(resExact);
-    
-    std::string searchPattern = cleanName.substr(0, 10) + "%"; 
-    const char* likeParam[1] = { searchPattern.c_str() };
-    PGresult* resLike = PQexecParams(conn, 
-        "SELECT id, name FROM groups WHERE name LIKE $1", 
-        1, NULL, likeParam, NULL, NULL, 0);
-    
-    int likeCount = PQntuples(resLike);
-    if (likeCount > 0) {
-        std::cout << "[DB IsGroup] Найдено частичное совпадение:" << std::endl;
-        for (int i = 0; i < likeCount; i++) {
-            std::cout << "  - ID: " << PQgetvalue(resLike, i, 0) 
-                      << ", name: '" << PQgetvalue(resLike, i, 1) << "'" << std::endl;
-        }
-        PQclear(resLike);
-        return true;
-    }
-    
-    std::cout << "[DB IsGroup] Группа не найдена!" << std::endl;
-    PQclear(resLike);
-    return false;
+    return isGroup;
 }
+
 std::vector<std::string> Database::GetUserGroups(const std::string& username) {
     std::vector<std::string> groups;
     const char* params[1] = { username.c_str() };

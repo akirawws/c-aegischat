@@ -398,6 +398,7 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
 }
 
 void SendPrivateMessageFromUI() {
+    std::cout << "[CLIENT] Sending as: '" << userName << "' to: '" << g_uiState.activeChatUser << "'" << std::endl;
     if (!isConnected || clientSocket == INVALID_SOCKET) return;
     if (g_uiState.activeChatUser.empty()) return;
     wchar_t wMsgBuf[512]; 

@@ -56,6 +56,17 @@ void HandleClient(SOCKET client_socket) {
         if (bytesReceived <= 0) break;
 
         uint8_t packetType = (uint8_t)buffer[0];
+            // === ОТЛАДКА: ЛОГ ВСЕХ ВХОДЯЩИХ ПАКЕТОВ ===
+        std::cout << "\n[SERVER DEBUG] Получен пакет:" << std::endl;
+        std::cout << "  Тип: " << (int)packetType << std::endl;
+        std::cout << "  От пользователя (currentUsername): '" << currentUsername << "'" << std::endl;
+        if (packetType == PACKET_CHAT_MESSAGE && bytesReceived >= (int)sizeof(ChatMessagePacket)) {
+            ChatMessagePacket* p = (ChatMessagePacket*)buffer;
+            std::cout << "  [CHAT] Отправитель: '" << p->senderUsername << "'" << std::endl;
+            std::cout << "  [CHAT] Получатель: '" << p->targetUsername << "'" << std::endl;
+            std::cout << "  [CHAT] Текст: '" << p->content << "'" << std::endl;
+        }
+        std::cout << "[SERVER DEBUG] ----------------------------------------\n" << std::endl;
 
         if (packetType == PACKET_LOGIN || packetType == PACKET_REGISTER) {
             AuthPacket* packet = (AuthPacket*)buffer;

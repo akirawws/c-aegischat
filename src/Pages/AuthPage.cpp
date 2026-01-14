@@ -8,6 +8,9 @@
 #include "Pages/MainPage.h"
 #include <cstring>
 #include <string>
+#include <wingdi.h>
+#pragma comment(lib, "msimg32.lib")
+
 
 enum AuthState { STATE_LOGIN, STATE_REGISTER };
 AuthState currentAuthState = STATE_LOGIN;
@@ -86,7 +89,7 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         hRememberCheck = CreateWindowA("BUTTON", "Remember me on this device", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
             startX, 320, fieldW, 20, hwnd, NULL, NULL, NULL);
 
-        hActionBtn = CreateWindowA("BUTTON", "Login", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW,
+        hActionBtn = CreateWindowA("BUTTON", "Login", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
             startX, 380, fieldW, 48, hwnd, (HMENU)1, NULL, NULL);
 
         hSwitchBtn = CreateWindowA("BUTTON", "Don't have an account? Register", WS_VISIBLE | WS_CHILD | BS_FLAT,
@@ -271,30 +274,45 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        RECT rect; GetClientRect(hwnd, &rect);
-        
-        // Фон с градиентом
-        HBRUSH brush = CreateSolidBrush(COLOR_BG_DARK);
-        FillRect(hdc, &rect, brush);
-        DeleteObject(brush);
-        
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+    
+        // --- Градиентный фон ---
+        TRIVERTEX vertex[2];
+        vertex[0].x = 0;
+        vertex[0].y = 0;
+        vertex[0].Red = 0x1E00;   // тёмно-синий верх
+        vertex[0].Green = 0x1E00;
+        vertex[0].Blue = 0x2E00;
+        vertex[0].Alpha = 0x0000;
+    
+        vertex[1].x = rect.right;
+        vertex[1].y = rect.bottom;
+        vertex[1].Red = 0x0500;   // чуть светлее низ
+        vertex[1].Green = 0x0500;
+        vertex[1].Blue = 0x0800;
+        vertex[1].Alpha = 0x0000;
+    
+        GRADIENT_RECT gRect = { 0, 1 };
+        GradientFill(hdc, vertex, 2, &gRect, 1, GRADIENT_FILL_RECT_V); // вертикальный плавный градиент
+        // ------------------------
+    
         // Верхняя полоса с акцентом
         RECT accentRect = {0, 0, rect.right, 4};
         HBRUSH accentBrush = CreateSolidBrush(COLOR_ACCENT_BLUE);
         FillRect(hdc, &accentRect, accentBrush);
         DeleteObject(accentBrush);
-
+    
         SetTextColor(hdc, COLOR_TEXT_WHITE);
         SetBkMode(hdc, TRANSPARENT);
         
-        // Заголовок с улучшенной типографикой
+        // Остальной код рисования текста, заголовка и меток
         HFONT hTitleFont = CreateAppFont(32, FONT_WEIGHT_BOLD);
         SelectObject(hdc, hTitleFont);
         RECT headerRect = {0, 40, rect.right, 90};
         DrawTextA(hdc, "AEGIS", -1, &headerRect, DT_CENTER);
         DeleteObject(hTitleFont);
-        
-        // Подзаголовок
+    
         HFONT hSubtitleFont = CreateAppFont(14, FONT_WEIGHT_NORMAL);
         SelectObject(hdc, hSubtitleFont);
         SetTextColor(hdc, COLOR_TEXT_GRAY);
@@ -302,23 +320,7 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         const char* subtitle = currentAuthState == STATE_LOGIN ? "Welcome back" : "Create your account";
         DrawTextA(hdc, subtitle, -1, &subtitleRect, DT_CENTER);
         DeleteObject(hSubtitleFont);
-
-        // Метки полей
-        HFONT hLabelFont = CreateAppFont(12, FONT_WEIGHT_NORMAL);
-        SelectObject(hdc, hLabelFont);
-        SetTextColor(hdc, COLOR_TEXT_LIGHT_GRAY);
-
-        if (currentAuthState == STATE_LOGIN) {
-            TextOutA(hdc, 50, 110, "Username or Email", 17);
-            TextOutA(hdc, 50, 250, "Password", 8);
-        } else {
-            TextOutA(hdc, 50, 110, "Desired Nametag", 15);
-            TextOutA(hdc, 50, 180, "Email Address", 13);
-            TextOutA(hdc, 50, 250, "Password", 8);
-            TextOutA(hdc, 50, 320, "Confirm Password", 16);
-        }
-
-        DeleteObject(hLabelFont);
+    
         EndPaint(hwnd, &ps);
         break;
     }
@@ -326,37 +328,48 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_DRAWITEM: {
         if (wParam == 1) { 
             LPDRAWITEMSTRUCT dis = (LPDRAWITEMSTRUCT)lParam;
-            
-            // Улучшенная кнопка с эффектом наведения
-            COLORREF btnColor = COLOR_ACCENT_BLUE;
+    
+            // Цвет фона по состоянию
+            COLORREF btnColor;
             if (dis->itemState & ODS_SELECTED) {
-                btnColor = COLOR_ACCENT_BLUE_DARK;
+                btnColor = RGB(35, 90, 190); // при нажатии
             } else if (dis->itemState & ODS_HOTLIGHT) {
-                btnColor = COLOR_BUTTON_HOVER;
+                btnColor = RGB(65, 140, 240); // при наведении
+            } else {
+                btnColor = RGB(45, 110, 220); // обычное состояние
             }
-            
+    
+            // Цвет текста
+            COLORREF textColor = RGB(255, 255, 255); // белый
+    
+            // Фон кнопки
             HBRUSH hBtnBrush = CreateSolidBrush(btnColor);
             FillRect(dis->hDC, &dis->rcItem, hBtnBrush);
             DeleteObject(hBtnBrush);
-            
-            // Рамка
-            HPEN hPen = CreatePen(PS_SOLID, 1, btnColor);
+    
+            // Рамка (немного светлее фона)
+            HPEN hPen = CreatePen(PS_SOLID, 1, RGB(80, 160, 255));
             HPEN hOldPen = (HPEN)SelectObject(dis->hDC, hPen);
             Rectangle(dis->hDC, dis->rcItem.left, dis->rcItem.top, dis->rcItem.right, dis->rcItem.bottom);
             SelectObject(dis->hDC, hOldPen);
             DeleteObject(hPen);
-            
-            SetTextColor(dis->hDC, COLOR_TEXT_WHITE);
+    
+            // Настройка текста
+            SetTextColor(dis->hDC, textColor);
             SetBkMode(dis->hDC, TRANSPARENT);
             HFONT hBtnFont = CreateAppFont(17, FONT_WEIGHT_BOLD);
             SelectObject(dis->hDC, hBtnFont);
-            char btnText[32]; GetWindowTextA(dis->hwndItem, btnText, 32);
+    
+            char btnText[32];
+            GetWindowTextA(dis->hwndItem, btnText, 32);
             DrawTextA(dis->hDC, btnText, -1, &dis->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             DeleteObject(hBtnFont);
+    
             return TRUE;
         }
         break;
     }
+    
 
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
@@ -374,14 +387,15 @@ LRESULT CALLBACK AuthWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
-        if ((HWND)lParam == hRememberCheck) {
-            SetTextColor(hdc, COLOR_TEXT_LIGHT_GRAY);
-            SetBkColor(hdc, COLOR_BG_DARK);
-            static HBRUSH hCheckBg = CreateSolidBrush(COLOR_BG_DARK);
-            return (LRESULT)hCheckBg;
+        if ((HWND)lParam == hActionBtn) {
+            SetTextColor(hdc, RGB(255,255,255));        // белый текст
+            SetBkColor(hdc, RGB(45,110,220));          // синий фон
+            static HBRUSH hBrush = CreateSolidBrush(RGB(45,110,220));
+            return (LRESULT)hBrush;
         }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
+    
 
     case WM_DESTROY: PostQuitMessage(0); break;
     default: return DefWindowProc(hwnd, uMsg, wParam, lParam);

@@ -16,6 +16,7 @@
 #include <vector>
 #include <commctrl.h>
 #include <gdiplus.h>
+#include "Components/MessageList.h"
 #include <Utils/Utils.h>
 using namespace Gdiplus; 
 
@@ -31,6 +32,9 @@ HWND hMainWnd = NULL;
 const int SIDEBAR_ICONS = 72;
 const int SIDEBAR_DM    = 240;
 static int hoveredIndex = -1;
+int g_scrollOffset = 0;          
+int g_totalMessageHeight = 0;    
+const int MESSAGE_HEIGHT = 24;   
 
 extern int inputEditHeight;
 extern HWND hInputEdit; 
@@ -292,7 +296,7 @@ case WM_CREATE: {
             ShowChatUI(true);
             if (hMessageList) {
                 InvalidateRect(hMessageList, NULL, TRUE);
-                PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                ScrollMessagesToBottom();
             }
         } else {
             ShowChatUI(false);
@@ -416,6 +420,13 @@ case WM_PAINT: {
             InvalidateRect(hwnd, NULL, FALSE);
             break;
         }
+  case WM_MOUSEWHEEL: {
+    short delta = GET_WHEEL_DELTA_WPARAM(wParam);
+    g_scrollOffset -= delta; // прокрутка вверх-вниз
+    g_scrollOffset = std::max(0, std::min(g_scrollOffset, std::max(0, g_totalMessageHeight - (HIWORD(lParam) - LOWORD(lParam)))));
+    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
+    break;
+}
 
     case WM_CTLCOLOREDIT: {
             HDC hdcEdit = (HDC)wParam;

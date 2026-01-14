@@ -5,7 +5,7 @@
 #include "Components/SidebarFriends.h"
 #include "AuthProtocol.h" 
 #include "Pages/FriendsPage.h"
-
+#include "Components/MessageList.h"
 #include <ws2tcpip.h>
 #include <vector>
 #include <algorithm>
@@ -120,7 +120,7 @@ void ParseMessage(const std::string& msg) {
 
     if (hMessageList) {
         InvalidateRect(hMessageList, NULL, TRUE);
-        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+        ScrollMessagesToBottom();
     }
 }
 bool SendPacket(const char* data, int size) {
@@ -321,7 +321,7 @@ void ReceiveMessages() {
                     if (hMessageList) {
                         InvalidateRect(hMessageList, NULL, TRUE);
                         UpdateWindow(hMessageList);
-                        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                        ScrollMessagesToBottom();
                     }
                 }
             }
@@ -389,6 +389,7 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
         if (hMainWnd) {
             InvalidateRect(hMainWnd, NULL, FALSE); 
             UpdateWindow(hMainWnd);
+            ScrollMessagesToBottom();
         }
     }
 }

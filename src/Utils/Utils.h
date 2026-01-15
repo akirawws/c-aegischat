@@ -26,5 +26,6 @@ void WriteLog(const std::string& text);
 std::string WideToUtf8(const std::wstring& wstr);
 std::string HashPassword(const std::string& password, const std::string& salt);
 std::wstring Utf8ToWide(const std::string& str);
+std::string GetUserAvatarPath(const std::string& username);
 
 #endif

@@ -1,6 +1,29 @@
 #include "Utils.h"
 #include <cstdio>
 #include <algorithm>
+#include <filesystem>
+namespace fs = std::filesystem;
+
+std::string g_cacheDir = "cache";
+
+std::string GetUserAvatarPath(const std::string& username) {
+    if (username.empty()) return "";
+
+    std::string safeUsername = username;
+    std::replace(safeUsername.begin(), safeUsername.end(), '\\', '_');
+    std::replace(safeUsername.begin(), safeUsername.end(), '/', '_');
+    std::replace(safeUsername.begin(), safeUsername.end(), ':', '_');
+
+    // Попробуем возможные расширения
+    std::vector<std::string> extensions = {".jpg", ".jpeg", ".png", ".bmp", ".gif"};
+    for (const auto& ext : extensions) {
+        std::string path = g_cacheDir + "/" + safeUsername + ext;
+        if (fs::exists(path)) {
+            return path;
+        }
+    }
+    return "";
+}
 
 std::string WideToUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return std::string();

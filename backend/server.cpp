@@ -203,6 +203,57 @@ void HandleClient(SOCKET client_socket) {
                 }
             }
         }
+        else if (packetType == PACKET_DISPLAY_NAME_REPLACEMENT) {
+            DisplayNameReplacementPacket* dPkt = (DisplayNameReplacementPacket*)buffer;
+            
+            std::cout << "[SERVER] Запрос на изменение имени:" << std::endl;
+            std::cout << "  Текущий пользователь: '" << currentUsername << "'" << std::endl;
+            std::cout << "  Имя из пакета: '" << dPkt->username << "'" << std::endl;
+            std::cout << "  Новое имя: '" << dPkt->newDisplayName << "'" << std::endl;
+
+            // Проверка безопасности: совпадает ли имя в пакете с текущим пользователем
+            if (currentUsername.empty() || currentUsername != std::string(dPkt->username)) {
+                std::cout << "[SERVER ERROR] Отказ: несовпадение имён пользователя!" << std::endl;
+                continue;
+            }
+
+            // Обновляем профиль в базе данных
+            if (db.UpdateUserDisplayName(currentUsername, dPkt->newDisplayName)) {
+                std::cout << "[SERVER] Имя успешно обновлено в БД" << std::endl;
+
+                // Получаем обновлённый профиль
+                UserProfile profile = db.GetUserProfile(currentUsername);
+                
+                // Формируем пакет профиля
+                UserProfilePacket pPkt;
+                pPkt.type = PACKET_USER_PROFILE;
+                memset(pPkt.username, 0, 64);
+                memset(pPkt.display_name, 0, 64);
+                memset(pPkt.avatar_url, 0, 256);
+
+                strncpy(pPkt.username, currentUsername.c_str(), 63);
+                strncpy(pPkt.display_name, profile.display_name.c_str(), 63);
+                strncpy(pPkt.avatar_url, profile.avatar_url.c_str(), 255);
+
+                // 1. Отправляем обновление самому пользователю
+                send(client_socket, (char*)&pPkt, sizeof(UserProfilePacket), 0);
+                std::cout << "[SERVER] Обновление профиля отправлено клиенту" << std::endl;
+
+                // 2. Рассылаем обновление всем онлайн-друзьям
+                std::vector<std::string> friends = db.GetAcceptedFriends(currentUsername);
+                std::lock_guard<std::mutex> lock(users_mutex);
+                
+                for (const auto& friendName : friends) {
+                    if (onlineUsers.count(friendName)) {
+                        send(onlineUsers[friendName], (char*)&pPkt, sizeof(UserProfilePacket), 0);
+                        std::cout << "[SERVER] Обновление профиля отправлено другу: " << friendName << std::endl;
+                    }
+                }
+            } else {
+                std::cout << "[SERVER ERROR] Не удалось обновить имя в базе данных!" << std::endl;
+            }
+        }
+
         else if (packetType == PACKET_CREATE_GROUP) {
             CreateGroupPacket* gPkt = (CreateGroupPacket*)buffer;
             std::vector<std::string> memberList;

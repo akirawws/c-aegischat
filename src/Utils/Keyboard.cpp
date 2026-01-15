@@ -1,61 +1,57 @@
-#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#endif
-
-#include <winsock2.h>
 #include <windows.h>
-#include <vector>
 #include "Keyboard.h"
 #include "Utils/Network.h"
 #include "Components/MessageInput.h"
 
 extern HWND hInputEdit;
 
-bool HandleKeyboardInput(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, HWND hInputEdit) {
-    if (GetFocus() != hInputEdit) return false;
+int HandleKeyboardInput(void* hwnd, unsigned int uMsg, unsigned long long wParam, long long lParam, void* hInputEdit_param) {
+    HWND hInput = (HWND)hInputEdit_param;
+    if (GetFocus() != hInput) return 0;
     
     if (uMsg == WM_KEYDOWN) {
-        bool ctrl = GetKeyState(VK_CONTROL) < 0;
-        bool shift = GetKeyState(VK_SHIFT) < 0;
+        int ctrl = GetKeyState(VK_CONTROL) < 0;
+        int shift = GetKeyState(VK_SHIFT) < 0;
         
         if (ctrl) {
             switch (wParam) {
             case 'A': case 'a':
-                SendMessage(hInputEdit, EM_SETSEL, 0, -1);
-                return true;
+                SendMessage(hInput, EM_SETSEL, 0, -1);
+                return 1;
             case 'C': case 'c':
-                SendMessage(hInputEdit, WM_COPY, 0, 0);
-                return true;
+                SendMessage(hInput, WM_COPY, 0, 0);
+                return 1;
             case 'V': case 'v':
-                SendMessage(hInputEdit, WM_PASTE, 0, 0);
-                return true;
+                SendMessage(hInput, WM_PASTE, 0, 0);
+                return 1;
             case 'X': case 'x':
-                SendMessage(hInputEdit, WM_CUT, 0, 0);
-                return true;
+                SendMessage(hInput, WM_CUT, 0, 0);
+                return 1;
             case 'Z': case 'z':
-                SendMessage(hInputEdit, EM_UNDO, 0, 0);
-                return true;
+                SendMessage(hInput, EM_UNDO, 0, 0);
+                return 1;
             }
         }
         
         if (wParam == VK_RETURN && !shift) {
             SendPrivateMessageFromUI();
-            return true;
+            return 1;
         }
     }
     
     if (uMsg == WM_CHAR) {
         if (wParam == VK_RETURN) {
             if (!(GetKeyState(VK_SHIFT) & 0x8000)) {
-                return true;
+                return 1;
             }
         }
     }
     
-    return false;
+    return 0;
 }
 
-void ProcessMessageLoop() {
+void ProcessMessageLoop(void) {
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0)) {
         if (msg.message == WM_KEYDOWN && msg.hwnd == hInputEdit) {

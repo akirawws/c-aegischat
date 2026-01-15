@@ -72,6 +72,24 @@ bool ConnectToServer(const std::string& address, const std::string& port) {
 }
 
 
+void SendDisplayNameChange(const std::string& newDisplayName) {
+    if (!isConnected || clientSocket == INVALID_SOCKET || newDisplayName.empty()) {
+        return;
+    }
+
+    DisplayNameReplacementPacket pkt{};
+    pkt.type = PACKET_DISPLAY_NAME_REPLACEMENT;
+    
+    // Копируем текущее имя пользователя (из глобальной переменной)
+    strncpy(pkt.username, userName.c_str(), sizeof(pkt.username) - 1);
+    
+    // Копируем новое отображаемое имя
+    strncpy(pkt.newDisplayName, newDisplayName.c_str(), sizeof(pkt.newDisplayName) - 1);
+
+    if (!SendPacket((char*)&pkt, sizeof(pkt))) {
+        MessageBoxA(hMainWnd, "Не удалось отправить запрос на изменение имени", "Ошибка", MB_OK | MB_ICONERROR);
+    }
+}
 
 void StartMessageSystem() {
     if (isConnected && clientSocket != INVALID_SOCKET) {

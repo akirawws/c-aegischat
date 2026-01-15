@@ -39,6 +39,7 @@ public:
     bool IsGroup(const std::string& targetName); 
     std::string Trim(const std::string& s);
     UserProfile GetUserProfile(const std::string& username);
+    bool UpdateUserDisplayName(const std::string& username, const std::string& newDisplayName);
 
 private:
     PGconn* conn; 

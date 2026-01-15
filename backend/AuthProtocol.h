@@ -18,7 +18,9 @@ enum PacketType : uint8_t {
     PACKET_CHAT_HISTORY = 10,
     PACKET_CREATE_GROUP = 11,
     PACKET_GROUP_LIST = 12,
-    PACKET_USER_PROFILE = 13
+    PACKET_USER_PROFILE = 13,
+    PACKET_TOKEN_AUTH = 14,
+    PACKET_DISPLAY_NAME_REPLACEMENT = 15
 };
 
 struct AuthPacket {
@@ -88,6 +90,17 @@ struct UserProfilePacket {
     char username[64];
     char display_name[64];
     char avatar_url[256];
+};
+
+struct TokenAuthPacket {
+    uint8_t type;
+    char token[32];  // 16 символов + нулевой терминатор
+};
+
+struct DisplayNameReplacementPacket {
+    uint8_t type;
+    char username[64];
+    char newDisplayName[64];
 };
 
 #pragma pack(pop)

@@ -34,5 +34,6 @@ void SendPrivateMessageFromUI();
 bool SendPacket(const char* data, int size);
 bool ReceivePacket(char* data, int size);
 void RequestCreateGroup(const std::vector<std::string>& members);
+void SendDisplayNameChange(const std::string& newDisplayName);
 
 #endif

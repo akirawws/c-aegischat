@@ -1,12 +1,21 @@
-#ifndef KEYBOARD_H
-#define KEYBOARD_H
+#ifndef UTILS_KEYBOARD_H
+#define UTILS_KEYBOARD_H
 
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
 #include <windows.h>
 
-bool HandleKeyboardInput(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, HWND hInputEdit);
+using HWNDHandle = HWND;
+using MsgCode    = UINT;
+using WParam     = WPARAM;
+using LParam     = LPARAM;
+
+int HandleKeyboardInput(
+    HWNDHandle hwnd,
+    MsgCode msg,
+    WParam wParam,
+    LParam lParam,
+    void* userData
+);
+
 void ProcessMessageLoop();
 
-#endif
-
+#endif // UTILS_KEYBOARD_H

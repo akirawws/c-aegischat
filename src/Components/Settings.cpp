@@ -5,6 +5,7 @@
 #include <commctrl.h>
 #include <gdiplus.h>
 #include "Utils/Messages.h"
+#include "Utils/Network.h"
 
 using namespace Gdiplus;
 
@@ -94,8 +95,14 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         if (LOWORD(wParam) == 1001 && HIWORD(wParam) == BN_CLICKED) {
             wchar_t buffer[256] = {0};
             GetWindowTextW(g_hDisplayNameEdit, buffer, _countof(buffer));
-            g_uiState.userDisplayName = WideToUtf8(buffer);
-            DestroyWindow(hwnd); // ← Просто уничтожаем окно
+            std::string newName = WideToUtf8(buffer);
+
+            if (!newName.empty()) {
+                g_uiState.userDisplayName = newName;
+                SendDisplayNameChange(newName); // ← ОТПРАВКА НА СЕРВЕР
+            }
+
+            DestroyWindow(hwnd);
         }
         break;
     }

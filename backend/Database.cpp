@@ -197,6 +197,50 @@ bool Database::RegisterUser(const std::string& user, const std::string& email, c
     PQclear(res);
     return success;
 }
+bool Database::UpdateUserDisplayName(const std::string& username, const std::string& newDisplayName) {
+    if (!conn) {
+        std::cerr << "[DB] Нет подключения к базе данных!" << std::endl;
+        return false;
+    }
+
+    // Защита от пустого имени
+    if (newDisplayName.empty()) {
+        std::cerr << "[DB] Попытка установить пустое отображаемое имя!" << std::endl;
+        return false;
+    }
+
+    // Подготовленный запрос для PostgreSQL
+    const char* paramValues[2] = { newDisplayName.c_str(), username.c_str() };
+    
+    PGresult* res = PQexecParams(conn,
+        "UPDATE users SET display_name = $1 WHERE username = $2",
+        2,           // количество параметров
+        NULL,        // типы параметров (NULL = автоопределение)
+        paramValues, // значения параметров
+        NULL,        // длины параметров (для двоичных данных)
+        NULL,        // форматы параметров (0 = текстовый)
+        0            // результат в двоичном формате? (0 = нет)
+    );
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "[DB ERROR] Не удалось обновить отображаемое имя: " 
+                  << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return false;
+    }
+
+    // Проверяем, сколько строк было затронуто
+    int rowsAffected = atoi(PQcmdTuples(res));
+    PQclear(res);
+
+    if (rowsAffected == 0) {
+        std::cerr << "[DB WARNING] Пользователь не найден: " << username << std::endl;
+        return false;
+    }
+
+    std::cout << "[DB] Успешно обновлено отображаемое имя для: " << username << std::endl;
+    return true;
+}
 
 bool Database::AuthenticateUser(const std::string& login, const std::string& pass) {
     if (!conn) return false;

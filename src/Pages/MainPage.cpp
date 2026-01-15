@@ -18,6 +18,8 @@
 #include <gdiplus.h>
 #include "Components/MessageList.h"
 #include <Utils/Utils.h>
+#include "Components/Settings.h" 
+#include "Utils/Messages.h"
 using namespace Gdiplus; 
 
 extern std::map<std::string, ChatCache> chatHistories;
@@ -27,6 +29,9 @@ extern std::vector<DMUser> dmUsers;
 extern Gdiplus::Image* g_pMainIcon;
 extern int g_activeIndex;
 extern int g_hoverIndex;
+
+#define SIDEBAR_PROFILE_SETTINGS 998
+bool IsClickOnSettingsIcon(int x, int y, int sidebarX, int windowHeight, int totalWidth);
 
 HWND hMainWnd = NULL;
 const int SIDEBAR_ICONS = 72;
@@ -62,6 +67,7 @@ HWND CreateMainPage(HINSTANCE hInstance, int x, int y, int width, int height) {
 }
 
 void OpenAddMembersDialog(HWND parent) {}
+
 
 
 void CenterWindow(HWND hwnd, HWND hwndParent) {
@@ -211,24 +217,34 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
     }
     case WM_MOUSEMOVE: {
-    int x = LOWORD(lParam);
-    int y = HIWORD(lParam);
-    
-    int oldHover = g_hoverIndex;
-    if (x < SIDEBAR_ICONS) {
-        if (y >= 14 && y <= 58) g_hoverIndex = 0;
-        else if (y >= 80 && y <= 124) g_hoverIndex = 1;
-        else if (y >= 136 && y <= 180) g_hoverIndex = 2;
-        else g_hoverIndex = -1;
-    } else {
-        g_hoverIndex = -1;
-    }
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        
+        // Получаем размеры окна
+        RECT clientRect;
+        GetClientRect(hwnd, &clientRect);
 
-    if (oldHover != g_hoverIndex) {
-        InvalidateRect(hwnd, NULL, FALSE);
+        int oldHover = g_hoverIndex;
+        g_hoverIndex = -1;
+
+        // Логика для иконок серверов
+        if (x < SIDEBAR_ICONS) {
+            if (y >= 14 && y <= 58) g_hoverIndex = 0;
+            else if (y >= 80 && y <= 124) g_hoverIndex = 1;
+            else if (y >= 136 && y <= 180) g_hoverIndex = 2;
+            // else остаётся -1
+        }
+
+        // Проверка наведения на иконку настроек
+        if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+            g_hoverIndex = SIDEBAR_PROFILE_SETTINGS;
+        }
+
+        if (oldHover != g_hoverIndex) {
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        break;
     }
-    break;
-}
 
 case WM_CREATE: {
             int startX = SIDEBAR_ICONS + SIDEBAR_DM;
@@ -263,26 +279,39 @@ case WM_CREATE: {
             ShowChatUI(false); 
             return 0;
         }
+case WM_UNLOCK_PARENT: {
+    // Отложите фокус на следующий цикл
+    PostMessageW(hwnd, WM_USER + 200, 0, 0);
+    break;
+}
 
- case WM_LBUTTONDOWN: {
+case WM_USER + 200: {
+    EnableWindow(hwnd, TRUE);
+    SetFocus(hwnd);
+    InvalidateRect(hwnd, NULL, TRUE);
+    break;
+}
+case WM_LBUTTONDOWN: {
     int x = LOWORD(lParam);
     int y = HIWORD(lParam);
     RECT rect;
     GetClientRect(hwnd, &rect);
+    RECT clientRect;
+        GetClientRect(hwnd, &clientRect);
+        if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+            OpenSettingsDialog(hwnd);
+            return 0;
+        }
 
-    // 1. Проверка клика по профилю (САМЫЙ ВЫСОКИЙ ПРИОРИТЕТ)
-    // Профиль теперь начинается от x = 0 и занимает ширину обеих колонок
+    // 1. Проверка клика по профилю
     if (IsClickOnProfile(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-        // Здесь логика открытия настроек профиля (если есть)
         return 0; 
     }
 
     // 2. Логика клика по первой колонке (Иконки серверов)
     if (x < SIDEBAR_ICONS) {
-        // Проверяем координаты иконок (примерные значения из Sidebar.cpp)
         if (y >= 14 && y <= 58) g_activeIndex = 0;
         else if (y >= 80 && y <= 124) g_activeIndex = 1;
-        
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
@@ -290,7 +319,6 @@ case WM_CREATE: {
     // 3. Логика клика по второй колонке (Список DM / Друзей)
     if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
         HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
-        
         if (g_uiState.currentPage == AppPage::Messages) {
             messages = chatHistories[g_uiState.activeChatUser].messages;
             ShowChatUI(true);
@@ -321,8 +349,9 @@ case WM_CREATE: {
         HandleFriendsClick(hwnd, x, y, hInstance);
         InvalidateRect(hwnd, NULL, FALSE);
     }
-    
-    return 0;
+
+
+    break; // ← ОБЯЗАТЕЛЬНО добавьте break!
 }
 
 case WM_PAINT: {

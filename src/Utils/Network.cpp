@@ -82,6 +82,25 @@ void RequestAvatar(const std::string& username) {
 }
 
 
+void SendBioChange(const std::string& newBio) {
+    if (!isConnected || clientSocket == INVALID_SOCKET) return;
+
+    BioReplacementPacket pkt;
+    memset(&pkt, 0, sizeof(BioReplacementPacket)); 
+    
+    pkt.type = 19; // PACKET_BIO_REPLACEMENT
+    
+    // Используем безопасное копирование
+    strncpy(pkt.bio, newBio.c_str(), sizeof(pkt.bio) - 1);
+
+    // Логируем факт отправки
+    std::cout << "[Network] Отправка пакета 19, размер: " << sizeof(pkt) << " байт" << std::endl;
+
+    if (!SendPacket((char*)&pkt, sizeof(pkt))) {
+        std::cerr << "[Network] Ошибка отправки Bio" << std::endl;
+    }
+}
+
 void SendDisplayNameChange(const std::string& newDisplayName) {
     if (!isConnected || clientSocket == INVALID_SOCKET || newDisplayName.empty()) {
         return;

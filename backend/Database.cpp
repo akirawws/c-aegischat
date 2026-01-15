@@ -115,6 +115,26 @@ bool Database::UpdateUserAvatar(const std::string& username, const std::string& 
     PQclear(res);
     return success;
 }
+bool Database::UpdateUserBio(const std::string& username, const std::string& newBio) {
+    if (!conn) return false;
+
+    const char* params[2] = { newBio.c_str(), username.c_str() };
+    
+    // Предполагаем, что колонка в БД называется 'bio'
+    PGresult* res = PQexecParams(conn,
+        "UPDATE users SET bio = $1 WHERE username = $2",
+        2, NULL, params, NULL, NULL, 0);
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "[DB ERROR] UpdateUserBio: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        return false;
+    }
+
+    PQclear(res);
+    return true;
+}
+
 
 std::vector<std::string> Database::GetPendingRequests(const std::string& username) {
     std::vector<std::string> senders;

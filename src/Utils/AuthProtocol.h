@@ -23,7 +23,8 @@ enum PacketType : uint8_t {
     PACKET_DISPLAY_NAME_REPLACEMENT = 15,
     PACKET_AVATAR_UPDATE = 16,
     PACKET_GET_AVATAR = 17,
-    PACKET_AVATAR_DATA = 18
+    PACKET_AVATAR_DATA = 18,
+    PACKET_BIO_REPLACEMENT = 19
 };
 
 struct AuthPacket {
@@ -116,6 +117,12 @@ struct GetAvatarPacket {
     uint8_t type;
     char username[64];
 };
+
+struct BioReplacementPacket {
+    uint8_t type;
+    char bio[256]; // Ограничим длину bio 256 символами
+};
+
 
 
 #pragma pack(pop)

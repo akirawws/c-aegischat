@@ -6,6 +6,7 @@
 #include <gdiplus.h>
 #include "Utils/Network.h"
 
+
 using namespace Gdiplus;
 
 // Глобальные переменные
@@ -16,6 +17,8 @@ static int g_currentTab = 0;
 static HWND g_hProfileEdit = NULL;
 static HWND g_hProfileSaveBtn = NULL;
 static HWND g_hLogoutBtn = NULL;
+static HWND g_hBioEdit = NULL;
+
 
 // Размеры и константы
 const int SETTINGS_WIDTH = 700;
@@ -56,9 +59,11 @@ void ChooseAndUploadAvatar(HWND hwnd) {
 
 void UpdateControlVisibility() {
     if (!g_hSettingsWnd) return;
-    ShowWindow(g_hProfileEdit, g_currentTab == 0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_hProfileSaveBtn, g_currentTab == 0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_hLogoutBtn, g_currentTab == 2 ? SW_SHOW : SW_HIDE);
+    bool isProfile = (g_currentTab == 0);
+    ShowWindow(g_hProfileEdit, isProfile ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hBioEdit, isProfile ? SW_SHOW : SW_HIDE); // Показываем Bio
+    ShowWindow(g_hProfileSaveBtn, isProfile ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hLogoutBtn, (g_currentTab == 2) ? SW_SHOW : SW_HIDE);
     InvalidateRect(g_hSettingsWnd, NULL, TRUE);
 }
 
@@ -151,6 +156,9 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 SetTextColor(hdc, CLR_TEXT_MUTED);
                 SelectObject(hdc, g_hFont);
                 TextOutW(hdc, contentX, avatarY + 100, L"Отображаемое имя", 16);
+
+                TextOutW(hdc, contentX, avatarY + 100 + EDIT_HEIGHT + 12, L"О себе", 6);
+                
             }
             else if (g_currentTab == 1) { // ВКЛАДКА АККАУНТ
                 SelectObject(hdc, g_hBoldFont);
@@ -197,13 +205,28 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
             return 0;
         }
 
-        case WM_COMMAND: {
-            if (LOWORD(wParam) == 1001) { // Кнопка сохранить
-                wchar_t buffer[256];
-                GetWindowTextW(g_hProfileEdit, buffer, 256);
-                g_uiState.userDisplayName = WideToUtf8(buffer);
-                SendDisplayNameChange(g_uiState.userDisplayName);
-            }
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == 1001) { // Кнопка "Сохранить" на вкладке профиля
+            wchar_t wDisplayName[64];
+            wchar_t wBio[256];
+
+            // Получаем текст из полей ввода
+            GetWindowTextW(g_hProfileEdit, wDisplayName, 64);
+            GetWindowTextW(g_hBioEdit, wBio, 256);
+
+            // Конвертируем WideChar в UTF-8 строки
+            std::string newName = WideToUtf8(wDisplayName);
+            std::string newBio = WideToUtf8(wBio);
+
+            // ВАЖНО: Отправляем пакеты по очереди
+            SendDisplayNameChange(newName); // Пакет 15
+            
+            // ДОБАВЬТЕ ЭТУ СТРОКУ, если её нет:
+            OutputDebugStringA(("[Settings] Sending Bio: " + newBio + "\n").c_str());
+            SendBioChange(newBio);          // Пакет 19
+
+            MessageBoxW(hwnd, L"Профиль обновлен!", L"AEGIS", MB_OK | MB_ICONINFORMATION);
+        }
             if (LOWORD(wParam) == 3000) DestroyWindow(hwnd);
             return 0;
         }
@@ -221,21 +244,31 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 void CreateProfileControls(HWND hwnd) {
     int contentX = SIDEBAR_WIDTH + PADDING * 2;
-    // Сдвигаем поля ввода ниже аватара
     int contentY = PADDING * 2 + 50 + 80 + 45; 
+    int inputWidth = SETTINGS_WIDTH - SIDEBAR_WIDTH - PADDING * 4;
 
+    // Поле имени (уже есть)
     g_hProfileEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"Edit", Utf8ToWide(g_uiState.userDisplayName).c_str(),
         WS_CHILD | ES_AUTOHSCROLL,
-        contentX, contentY, SETTINGS_WIDTH - SIDEBAR_WIDTH - PADDING * 4, EDIT_HEIGHT,
+        contentX, contentY, inputWidth, EDIT_HEIGHT,
         hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
-    
     SendMessageW(g_hProfileEdit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
+    // НОВОЕ: Поле BIO (Многострочное)
+    int bioY = contentY + EDIT_HEIGHT + 35; // Отступ вниз от имени
+    g_hBioEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"Edit", L"", 
+        WS_CHILD | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
+        contentX, bioY, inputWidth, 80, // Высота 80px
+        hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
+    SendMessageW(g_hBioEdit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    // Подсказка для Bio (через SendMessage)
+    SendMessageW(g_hBioEdit, EM_SETCUEBANNER, FALSE, (LPARAM)L"Расскажите о себе...");
+
+    // Кнопка сохранить (сдвигаем ниже под Bio)
     g_hProfileSaveBtn = CreateWindowExW(0, L"Button", L"Сохранить изменения",
         WS_CHILD | BS_PUSHBUTTON,
-        contentX, contentY + EDIT_HEIGHT + 15, 200, BUTTON_HEIGHT,
+        contentX, bioY + 80 + 15, 200, BUTTON_HEIGHT,
         hwnd, (HMENU)1001, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
-    
     SendMessageW(g_hProfileSaveBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 }
 

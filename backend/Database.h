@@ -41,6 +41,7 @@ public:
     UserProfile GetUserProfile(const std::string& username);
     bool UpdateUserDisplayName(const std::string& username, const std::string& newDisplayName);
     bool UpdateUserAvatar(const std::string& username, const std::string& fileName);
+    bool UpdateUserBio(const std::string& username, const std::string& newBio);
 private:
     PGconn* conn; 
     std::map<std::string, std::string> LoadEnv(const std::string& filename);

@@ -36,5 +36,6 @@ bool ReceivePacket(char* data, int size);
 void RequestCreateGroup(const std::vector<std::string>& members);
 void SendDisplayNameChange(const std::string& newDisplayName);
 void SendAvatarUpdate(const std::wstring& filePath);
+void SendBioChange(const std::string& newBio);
 
 #endif

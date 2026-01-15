@@ -262,6 +262,36 @@ void HandleClient(SOCKET client_socket) {
                 std::cout << "[SERVER ERROR] Не удалось обновить имя в базе данных!" << std::endl;
             }
         }
+            else if (packetType == PACKET_BIO_REPLACEMENT) {
+                // Накладываем структуру на уже считанный buffer
+                BioReplacementPacket* pkt = (BioReplacementPacket*)buffer;
+                
+                // Безопасно копируем в строку
+                char safeBio[256];
+                memset(safeBio, 0, 256);
+                memcpy(safeBio, pkt->bio, 255);
+                
+                std::string newBio = safeBio;
+
+                if (!currentUsername.empty()) {
+                    std::cout << "[SERVER] Смена BIO для " << currentUsername << ": " << newBio << std::endl;
+                    if (db.UpdateUserBio(currentUsername, newBio)) {
+                        std::cout << "[SERVER] BIO обновлено в базе." << std::endl;
+                        
+                        // Отправляем профиль назад (как у вас и было)
+                        UserProfile profile = db.GetUserProfile(currentUsername);
+                        UserProfilePacket resp;
+                        memset(&resp, 0, sizeof(resp));
+                        resp.type = PACKET_USER_PROFILE;
+                        strncpy(resp.username, profile.username.c_str(), 63);
+                        strncpy(resp.display_name, profile.display_name.c_str(), 63);
+                        strncpy(resp.avatar_url, profile.avatar_url.c_str(), 255);
+                        send(client_socket, (char*)&resp, sizeof(resp), 0);
+                    }
+                }
+            }
+
+
         else if (packetType == PACKET_GET_AVATAR) {
             GetAvatarPacket* req = (GetAvatarPacket*)buffer;
             std::string targetUser = req->username;

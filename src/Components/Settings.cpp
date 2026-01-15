@@ -4,165 +4,254 @@
 #include <windowsx.h>
 #include <commctrl.h>
 #include <gdiplus.h>
-#include "Utils/Messages.h"
 #include "Utils/Network.h"
 
 using namespace Gdiplus;
 
-// Глобальные переменные для окна настроек
+// Глобальные переменные
 static HWND g_hSettingsWnd = NULL;
-static HWND g_hDisplayNameEdit = NULL;
 static HFONT g_hFont = NULL;
+static HFONT g_hBoldFont = NULL;
+static int g_currentTab = 0; 
+static HWND g_hProfileEdit = NULL;
+static HWND g_hProfileSaveBtn = NULL;
+static HWND g_hLogoutBtn = NULL;
 
-// Размеры и отступы (в стиле Discord)
-const int SETTINGS_WIDTH = 500;
-const int SETTINGS_HEIGHT = 400;
+// Размеры и константы
+const int SETTINGS_WIDTH = 700;
+const int SETTINGS_HEIGHT = 500;
+const int SIDEBAR_WIDTH = 180;
 const int PADDING = 24;
 const int LABEL_HEIGHT = 24;
 const int EDIT_HEIGHT = 32;
 const int BUTTON_HEIGHT = 40;
 
-// Цвета Discord
+// Цвета
 #define CLR_BACKGROUND RGB(32, 34, 37)
-#define CLR_CARD RGB(49, 51, 56)
+#define CLR_SIDEBAR RGB(49, 51, 56)
 #define CLR_TEXT RGB(220, 221, 222)
 #define CLR_TEXT_MUTED RGB(148, 155, 164)
-#define CLR_INPUT_BG RGB(56, 58, 64)
-#define CLR_BUTTON RGB(88, 101, 242)
+#define CLR_HOVER RGB(79, 84, 92)
+#define CLR_SEPARATOR RGB(64, 68, 75)
+
+const wchar_t* TAB_NAMES[] = { L"Профиль", L"Учётная запись", L"Выход" };
+
+void ChooseAndUploadAvatar(HWND hwnd) {
+    OPENFILENAMEW ofn;
+    wchar_t szFile[260] = { 0 };
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hwnd;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = L"Изображения\0*.png;*.jpg;*.jpeg\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+    if (GetOpenFileNameW(&ofn)) {
+        SendAvatarUpdate(ofn.lpstrFile);
+        MessageBoxW(hwnd, L"Аватар отправлен на сервер!", L"AEGIS", MB_OK | MB_ICONINFORMATION);
+    }
+}
+
+void UpdateControlVisibility() {
+    if (!g_hSettingsWnd) return;
+    ShowWindow(g_hProfileEdit, g_currentTab == 0 ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hProfileSaveBtn, g_currentTab == 0 ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hLogoutBtn, g_currentTab == 2 ? SW_SHOW : SW_HIDE);
+    InvalidateRect(g_hSettingsWnd, NULL, TRUE);
+}
 
 LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_CREATE: {
-            // Создаём шрифт
-            g_hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                  DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            HWND hToolTip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
+                WS_POPUP | TTS_ALWAYSTIP,
+                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                hwnd, NULL, GetModuleHandle(NULL), NULL);
 
-            // Заголовок "Мой аккаунт"
-            HWND hHeader = CreateWindowExW(0, L"Static", L"Мой аккаунт",
-                WS_CHILD | WS_VISIBLE | SS_LEFT,
-                PADDING, PADDING, 300, LABEL_HEIGHT,
-                hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
-            SendMessageW(hHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-
-            // Подзаголовок
-            HWND hSubheader = CreateWindowExW(0, L"Static", L"Измените своё отображаемое имя",
-                WS_CHILD | WS_VISIBLE | SS_LEFT,
-                PADDING, PADDING + LABEL_HEIGHT + 4, 400, LABEL_HEIGHT,
-                hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
+            TOOLINFOW ti = { 0 };
+            ti.cbSize = sizeof(ti);
+            ti.uFlags = TTF_SUBCLASS;
+            ti.hwnd = hwnd;
+            ti.lpszText = (LPWSTR)L"Нажмите, чтобы изменить аватар";
             
-            HFONT hSmallFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                           DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-            SendMessageW(hSubheader, WM_SETFONT, (WPARAM)hSmallFont, TRUE);
-            // Сохраняем шрифт, чтобы удалить позже
-            SetWindowLongPtrW(hSubheader, GWLP_USERDATA, (LONG_PTR)hSmallFont);
+            // Координаты аватара в правой части
+            int avatarX = SIDEBAR_WIDTH + PADDING * 2;
+            int avatarY = PADDING * 2 + 50;
+            ti.rect.left = avatarX;
+            ti.rect.top = avatarY;
+            ti.rect.right = avatarX + 80;
+            ti.rect.bottom = avatarY + 80;
 
-            // Метка "Отображаемое имя"
-            HWND hLabel = CreateWindowExW(0, L"Static", L"Отображаемое имя",
-                WS_CHILD | WS_VISIBLE | SS_LEFT,
-                PADDING, PADDING + LABEL_HEIGHT * 2 + 30, 200, LABEL_HEIGHT,
-                hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
-            SendMessageW(hLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+            SendMessageW(hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
 
-            // Поле ввода
-            g_hDisplayNameEdit = CreateWindowExW(
-                WS_EX_CLIENTEDGE, L"Edit", Utf8ToWide(g_uiState.userDisplayName).c_str(),
-                WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-                PADDING, PADDING + LABEL_HEIGHT * 2 + 30 + LABEL_HEIGHT + 4,
-                SETTINGS_WIDTH - PADDING * 2, EDIT_HEIGHT,
-                hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL
-            );
-            SendMessageW(g_hDisplayNameEdit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-
-            // Кнопка "Сохранить"
-            HWND hSaveBtn = CreateWindowExW(
-                0, L"Button", L"Сохранить изменения",
-                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                SETTINGS_WIDTH - PADDING - 180, 
-                SETTINGS_HEIGHT - PADDING - BUTTON_HEIGHT,
-                180, BUTTON_HEIGHT,
-                hwnd, (HMENU)1001, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL
-            );
-            SendMessageW(hSaveBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-
+            g_hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            g_hBoldFont = CreateFontW(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
             return 0;
         }
 
-    case WM_COMMAND: {
-        if (LOWORD(wParam) == 1001 && HIWORD(wParam) == BN_CLICKED) {
-            wchar_t buffer[256] = {0};
-            GetWindowTextW(g_hDisplayNameEdit, buffer, _countof(buffer));
-            std::string newName = WideToUtf8(buffer);
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            
+            RECT rc; GetClientRect(hwnd, &rc);
+            HBRUSH hBg = CreateSolidBrush(CLR_BACKGROUND);
+            FillRect(hdc, &rc, hBg);
+            DeleteObject(hBg);
 
-            if (!newName.empty()) {
-                g_uiState.userDisplayName = newName;
-                SendDisplayNameChange(newName); // ← ОТПРАВКА НА СЕРВЕР
+            RECT sb = {0, 0, SIDEBAR_WIDTH, SETTINGS_HEIGHT};
+            HBRUSH hSb = CreateSolidBrush(CLR_SIDEBAR);
+            FillRect(hdc, &sb, hSb);
+            DeleteObject(hSb);
+
+            Graphics graphics(hdc);
+            graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+
+            // 1. Отрисовка Сайдбара (текст вкладок)
+            SetBkMode(hdc, TRANSPARENT);
+            int yPos = PADDING;
+            for (int i = 0; i < 3; i++) {
+                if (i == 2) yPos += 40;
+                if (g_currentTab == i) {
+                    RECT itemRect = {0, yPos, SIDEBAR_WIDTH, yPos + LABEL_HEIGHT};
+                    HBRUSH hHover = CreateSolidBrush(CLR_HOVER);
+                    FillRect(hdc, &itemRect, hHover);
+                    DeleteObject(hHover);
+                }
+                SelectObject(hdc, g_currentTab == i ? g_hBoldFont : g_hFont);
+                SetTextColor(hdc, CLR_TEXT);
+                TextOutW(hdc, PADDING, yPos, TAB_NAMES[i], (int)wcslen(TAB_NAMES[i]));
+                yPos += LABEL_HEIGHT + 8;
             }
 
-            DestroyWindow(hwnd);
+            // 2. Отрисовка Контента (правая часть)
+            int contentX = SIDEBAR_WIDTH + PADDING * 2;
+            int contentY = PADDING * 2;
+
+            if (g_currentTab == 0) { // ВКЛАДКА ПРОФИЛЬ
+                SelectObject(hdc, g_hBoldFont);
+                SetTextColor(hdc, CLR_TEXT);
+                TextOutW(hdc, contentX, contentY, L"Мой профиль", 11);
+
+                // Аватар
+                int avatarY = contentY + 50;
+                Rect avatarRect(contentX, avatarY, 80, 80);
+                SolidBrush circleBrush(Color(255, 66, 69, 73));
+                graphics.FillEllipse(&circleBrush, avatarRect);
+                
+                Font font(L"Segoe UI", 8, FontStyleBold);
+                SolidBrush textBrush(Color(255, 200, 200, 200));
+                StringFormat sf;
+                sf.SetAlignment(StringAlignmentCenter);
+                sf.SetLineAlignment(StringAlignmentCenter);
+                graphics.DrawString(L"EDIT", -1, &font, RectF((REAL)contentX, (REAL)avatarY, 80, 80), &sf, &textBrush);
+
+                // Метка поля ввода
+                SetTextColor(hdc, CLR_TEXT_MUTED);
+                SelectObject(hdc, g_hFont);
+                TextOutW(hdc, contentX, avatarY + 100, L"Отображаемое имя", 16);
+            }
+            else if (g_currentTab == 1) { // ВКЛАДКА АККАУНТ
+                SelectObject(hdc, g_hBoldFont);
+                SetTextColor(hdc, CLR_TEXT);
+                TextOutW(hdc, contentX, contentY, L"Учётная запись", 14);
+            }
+            else if (g_currentTab == 2) { // ВКЛАДКА ВЫХОД
+                SelectObject(hdc, g_hBoldFont);
+                SetTextColor(hdc, CLR_TEXT);
+                TextOutW(hdc, contentX, contentY, L"Выход", 5);
+            }
+
+            EndPaint(hwnd, &ps);
+            return 0;
         }
-        break;
-    }
 
-    case WM_CLOSE: {
-        DestroyWindow(hwnd);
-        return 0;
-    }
+        case WM_LBUTTONDOWN: {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
 
-        case WM_CTLCOLORSTATIC: {
-            HDC hdc = (HDC)wParam;
-            SetBkColor(hdc, CLR_BACKGROUND);
-            // Определяем, какой это статик: заголовок или подзаголовок
-            HWND hwndCtrl = (HWND)lParam;
-            // Для подзаголовка используем muted цвет
-            SetTextColor(hdc, CLR_TEXT_MUTED);
-            static HBRUSH hBgBrush = CreateSolidBrush(CLR_BACKGROUND);
-            return (INT_PTR)hBgBrush;
+            // Клик по аватару (только если вкладка 0)
+            if (g_currentTab == 0) {
+                int avatarX = SIDEBAR_WIDTH + PADDING * 2;
+                int avatarY = PADDING * 2 + 50;
+                if (x >= avatarX && x <= avatarX + 80 && y >= avatarY && y <= avatarY + 80) {
+                    ChooseAndUploadAvatar(hwnd);
+                    return 0;
+                }
+            }
+
+            // Переключение вкладок (Сайдбар)
+            if (x < SIDEBAR_WIDTH) {
+                int yPos = PADDING;
+                for (int i = 0; i < 3; i++) {
+                    if (i == 2) yPos += 40;
+                    if (y >= yPos && y <= yPos + LABEL_HEIGHT) {
+                        g_currentTab = i;
+                        UpdateControlVisibility();
+                        break;
+                    }
+                    yPos += LABEL_HEIGHT + 8;
+                }
+            }
+            return 0;
         }
 
-        case WM_CTLCOLOREDIT: {
-            HDC hdc = (HDC)wParam;
-            SetTextColor(hdc, CLR_TEXT);
-            SetBkColor(hdc, CLR_INPUT_BG);
-            static HBRUSH hBgBrush = CreateSolidBrush(CLR_INPUT_BG);
-            return (INT_PTR)hBgBrush;
-        }
-
-        case WM_CTLCOLORBTN: {
-            HDC hdc = (HDC)wParam;
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkColor(hdc, CLR_BUTTON);
-            static HBRUSH hBgBrush = CreateSolidBrush(CLR_BUTTON);
-            return (INT_PTR)hBgBrush;
+        case WM_COMMAND: {
+            if (LOWORD(wParam) == 1001) { // Кнопка сохранить
+                wchar_t buffer[256];
+                GetWindowTextW(g_hProfileEdit, buffer, 256);
+                g_uiState.userDisplayName = WideToUtf8(buffer);
+                SendDisplayNameChange(g_uiState.userDisplayName);
+            }
+            if (LOWORD(wParam) == 3000) DestroyWindow(hwnd);
+            return 0;
         }
 
         case WM_DESTROY: {
             g_hSettingsWnd = NULL;
-            // Удаляем шрифты
-            if (g_hFont) {
-                DeleteObject(g_hFont);
-                g_hFont = NULL;
-            }
-            // Шрифт подзаголовка сохранён в GWLP_USERDATA
-            HWND hSubheader = FindWindowExW(hwnd, NULL, L"Static", L"Измените своё отображаемое имя");
-            if (hSubheader) {
-                HFONT hSmallFont = (HFONT)GetWindowLongPtrW(hSubheader, GWLP_USERDATA);
-                if (hSmallFont) DeleteObject(hSmallFont);
-            }
+            if (g_hFont) DeleteObject(g_hFont);
+            if (g_hBoldFont) DeleteObject(g_hBoldFont);
             break;
         }
-
-        default:
-            return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+        default: return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
     return 0;
 }
 
+void CreateProfileControls(HWND hwnd) {
+    int contentX = SIDEBAR_WIDTH + PADDING * 2;
+    // Сдвигаем поля ввода ниже аватара
+    int contentY = PADDING * 2 + 50 + 80 + 45; 
+
+    g_hProfileEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"Edit", Utf8ToWide(g_uiState.userDisplayName).c_str(),
+        WS_CHILD | ES_AUTOHSCROLL,
+        contentX, contentY, SETTINGS_WIDTH - SIDEBAR_WIDTH - PADDING * 4, EDIT_HEIGHT,
+        hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
+    
+    SendMessageW(g_hProfileEdit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+    g_hProfileSaveBtn = CreateWindowExW(0, L"Button", L"Сохранить изменения",
+        WS_CHILD | BS_PUSHBUTTON,
+        contentX, contentY + EDIT_HEIGHT + 15, 200, BUTTON_HEIGHT,
+        hwnd, (HMENU)1001, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
+    
+    SendMessageW(g_hProfileSaveBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+}
+
+void CreateLogoutControls(HWND hwnd) {
+    int contentX = SIDEBAR_WIDTH + PADDING * 2;
+    int contentY = PADDING * 2 + 60;
+
+    g_hLogoutBtn = CreateWindowExW(0, L"Button", L"Выйти из аккаунта",
+        WS_CHILD | BS_PUSHBUTTON,
+        contentX, contentY, 200, BUTTON_HEIGHT,
+        hwnd, (HMENU)3000, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL);
+    
+    SendMessageW(g_hLogoutBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+}
+
 void OpenSettingsDialog(HWND parent) {
-    // Регистрируем класс окна (один раз)
     static bool registered = false;
     if (!registered) {
         WNDCLASSEXW wc = {0};
@@ -176,28 +265,16 @@ void OpenSettingsDialog(HWND parent) {
         registered = true;
     }
 
-    // Создаём окно
-    g_hSettingsWnd = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
-        L"AegisSettingsClass",
-        L"Настройки — AEGIS",
+    g_hSettingsWnd = CreateWindowExW(WS_EX_TOPMOST, L"AegisSettingsClass", L"Настройки — AEGIS",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        SETTINGS_WIDTH, SETTINGS_HEIGHT,
-        parent,
-        NULL,
-        GetModuleHandle(NULL),
-        NULL
-    );
+        CW_USEDEFAULT, CW_USEDEFAULT, SETTINGS_WIDTH, SETTINGS_HEIGHT,
+        parent, NULL, GetModuleHandle(NULL), NULL);
 
     if (g_hSettingsWnd) {
-        // Центрируем относительно родителя
-        RECT rcParent, rcDlg;
-        GetWindowRect(parent, &rcParent);
-        GetWindowRect(g_hSettingsWnd, &rcDlg);
-        int x = rcParent.left + (rcParent.right - rcParent.left - (rcDlg.right - rcDlg.left)) / 2;
-        int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcDlg.bottom - rcDlg.top)) / 2;
-        SetWindowPos(g_hSettingsWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
-
+        CreateProfileControls(g_hSettingsWnd);
+        CreateLogoutControls(g_hSettingsWnd);
+        g_currentTab = 0;
+        UpdateControlVisibility();
+        ShowWindow(g_hSettingsWnd, SW_SHOW);
     }
 }

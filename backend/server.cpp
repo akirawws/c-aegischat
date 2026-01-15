@@ -6,8 +6,17 @@
 #include <mutex>
 #include <algorithm>
 #include <map>
+#include <fstream>
+#include <ctime>
 #include "Database.h" 
 #include "AuthProtocol.h" 
+#if __has_include(<filesystem>)
+  #include <filesystem>
+  namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+  #include <experimental/filesystem>
+  namespace fs = std::experimental::filesystem;
+#endif
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -253,7 +262,102 @@ void HandleClient(SOCKET client_socket) {
                 std::cout << "[SERVER ERROR] Не удалось обновить имя в базе данных!" << std::endl;
             }
         }
+        else if (packetType == PACKET_GET_AVATAR) {
+            GetAvatarPacket* req = (GetAvatarPacket*)buffer;
+            std::string targetUser = req->username;
 
+            // 1. Получаем профиль из БД, чтобы узнать путь к файлу
+            UserProfile profile = db.GetUserProfile(targetUser);
+            std::string path = profile.avatar_url;
+
+            // 2. Проверяем существование файла
+            if (path.empty() || !fs::exists(path)) {
+                AvatarHeader header;
+                header.type = PACKET_AVATAR_DATA;
+                header.fileSize = 0; // Сообщаем клиенту, что аватара нет
+                send(client_socket, (char*)&header, sizeof(header), 0);
+            } else {
+                // 3. Открываем файл и определяем размер
+                std::ifstream file(path, std::ios::binary | std::ios::ate);
+                if (file.is_open()) {
+                    std::streamsize size = file.tellg();
+                    file.seekg(0, std::ios::beg);
+
+                    // 4. Формируем и отправляем заголовок
+                    AvatarHeader header;
+                    header.type = PACKET_AVATAR_DATA;
+                    header.fileSize = (uint32_t)size;
+                    std::string ext = fs::path(path).extension().string();
+                    memset(header.extension, 0, 8);
+                    strncpy(header.extension, ext.c_str(), 7);
+
+                    send(client_socket, (char*)&header, sizeof(header), 0);
+
+                    // 5. Читаем файл и отправляем данные
+                    std::vector<char> fileBuffer(size);
+                    if (file.read(fileBuffer.data(), size)) {
+                        send(client_socket, fileBuffer.data(), (int)size, 0);
+                        std::cout << "[SERVER] Отправлен аватар: " << targetUser << " (" << size << " байт)" << std::endl;
+                    }
+                }
+            }
+        }
+
+
+        else if (packetType == PACKET_AVATAR_UPDATE) {
+            // 1. Извлекаем заголовок из того, что уже прочитали в buffer
+            AvatarHeader header;
+            if (bytesReceived < sizeof(AvatarHeader)) {
+                // Если заголовок не влез в первый recv, дочитываем его
+                memcpy(&header, buffer, bytesReceived);
+                ReceiveExact(client_socket, ((char*)&header) + bytesReceived, sizeof(AvatarHeader) - bytesReceived);
+            } else {
+                memcpy(&header, buffer, sizeof(AvatarHeader));
+            }
+
+            uint32_t fileSize = header.fileSize;
+            std::cout << "[SERVER] Ожидаемый размер файла: " << fileSize << " байт" << std::endl;
+
+            if (fileSize > 10 * 1024 * 1024) { // Защита от слишком больших файлов
+                std::cout << "[SERVER ERROR] Файл слишком большой!" << std::endl;
+                continue;
+            }
+
+            std::vector<char> imageData(fileSize);
+
+            // 2. ВАЖНО: Проверяем, сколько байт самой картинки УЖЕ находятся в buffer
+            // (они прилетели вместе с заголовком в одном recv)
+            int headerSize = sizeof(AvatarHeader);
+            int alreadyReadPayload = bytesReceived - headerSize;
+
+            if (alreadyReadPayload > 0) {
+                if (alreadyReadPayload > (int)fileSize) alreadyReadPayload = fileSize;
+                memcpy(imageData.data(), buffer + headerSize, alreadyReadPayload);
+            }
+
+            // 3. Дочитываем строго оставшуюся часть
+            int remaining = fileSize - alreadyReadPayload;
+            if (remaining > 0) {
+                if (!ReceiveExact(client_socket, imageData.data() + alreadyReadPayload, remaining)) {
+                    std::cout << "[SERVER ERROR] Ошибка при дочитывании данных" << std::endl;
+                    break;
+                }
+            }
+
+            // 4. Сохранение (ваш существующий код)
+            std::string fileName = currentUsername + "_" + std::to_string(time(0)) + header.extension;
+            std::string relativePath = "assets/avatar_url/" + fileName;
+            
+            if (!fs::exists("assets/avatar_url/")) fs::create_directories("assets/avatar_url/");
+
+            std::ofstream outFile(relativePath, std::ios::binary);
+            if (outFile.is_open()) {
+                outFile.write(imageData.data(), fileSize);
+                outFile.close();
+                std::cout << "[SERVER] !!! ФАЙЛ УСПЕШНО ЗАПИСАН !!!" << std::endl;
+                db.UpdateUserAvatar(currentUsername, relativePath);
+            }
+        }
         else if (packetType == PACKET_CREATE_GROUP) {
             CreateGroupPacket* gPkt = (CreateGroupPacket*)buffer;
             std::vector<std::string> memberList;

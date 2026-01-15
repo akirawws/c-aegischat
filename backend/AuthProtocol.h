@@ -20,7 +20,10 @@ enum PacketType : uint8_t {
     PACKET_GROUP_LIST = 12,
     PACKET_USER_PROFILE = 13,
     PACKET_TOKEN_AUTH = 14,
-    PACKET_DISPLAY_NAME_REPLACEMENT = 15
+    PACKET_DISPLAY_NAME_REPLACEMENT = 15,
+    PACKET_AVATAR_UPDATE = 16,
+    PACKET_GET_AVATAR = 17,
+    PACKET_AVATAR_DATA = 18
 };
 
 struct AuthPacket {
@@ -102,6 +105,18 @@ struct DisplayNameReplacementPacket {
     char username[64];
     char newDisplayName[64];
 };
+
+struct AvatarHeader {
+    uint8_t type;
+    uint32_t fileSize;
+    char extension[8];
+};
+
+struct GetAvatarPacket {
+    uint8_t type;
+    char username[64];
+};
+
 
 #pragma pack(pop)
 #endif

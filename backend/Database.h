@@ -40,7 +40,7 @@ public:
     std::string Trim(const std::string& s);
     UserProfile GetUserProfile(const std::string& username);
     bool UpdateUserDisplayName(const std::string& username, const std::string& newDisplayName);
-
+    bool UpdateUserAvatar(const std::string& username, const std::string& fileName);
 private:
     PGconn* conn; 
     std::map<std::string, std::string> LoadEnv(const std::string& filename);

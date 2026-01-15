@@ -102,6 +102,20 @@ std::map<std::string, std::string> Database::LoadEnv(const std::string& filename
     }
     return env;
 }
+
+bool Database::UpdateUserAvatar(const std::string& username, const std::string& fileName) {
+    if (!conn) return false;
+
+    const char* params[2] = { fileName.c_str(), username.c_str() };
+    PGresult* res = PQexecParams(conn,
+        "UPDATE users SET avatar_url = $1 WHERE username = $2",
+        2, NULL, params, NULL, NULL, 0);
+
+    bool success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    return success;
+}
+
 std::vector<std::string> Database::GetPendingRequests(const std::string& username) {
     std::vector<std::string> senders;
     if (!conn) return senders;

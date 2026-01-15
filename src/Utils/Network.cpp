@@ -13,6 +13,9 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 
 std::vector<Message> messages; 
@@ -71,6 +74,13 @@ bool ConnectToServer(const std::string& address, const std::string& port) {
     return true;
 }
 
+void RequestAvatar(const std::string& username) {
+    GetAvatarPacket pkt;
+    pkt.type = PACKET_GET_AVATAR;
+    strncpy(pkt.username, username.c_str(), 63);
+    SendPacket((char*)&pkt, sizeof(pkt));
+}
+
 
 void SendDisplayNameChange(const std::string& newDisplayName) {
     if (!isConnected || clientSocket == INVALID_SOCKET || newDisplayName.empty()) {
@@ -98,6 +108,60 @@ void StartMessageSystem() {
         }
     }
 }
+
+#include <fstream>
+#include <vector>
+#include <string>
+
+void SendAvatarUpdate(const std::wstring& filePath) {
+    // Используем конструктор, который в MSVC принимает wstring, 
+    // либо открываем файл через файловый дескриптор/специальные функции.
+    // Самый надежный способ для Windows (MSVC):
+    std::ifstream file(filePath.c_str(), std::ios::binary | std::ios::ate);
+    
+    // Если вы используете MinGW и код выше не компилируется, 
+    // используйте альтернативный вариант открытия:
+    // std::ifstream file;
+    // file.open(filePath, std::ios::binary | std::ios::ate); 
+
+    if (!file.is_open()) {
+        std::cerr << "[Network] Failed to open file: " << std::string(filePath.begin(), filePath.end()) << std::endl;
+        return;
+    }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    if (size <= 0) return;
+
+    // Читаем байты
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size)) return;
+    file.close();
+
+    // Определяем расширение
+    std::wstring ext = L".jpg";
+    size_t dot = filePath.find_last_of(L".");
+    if (dot != std::wstring::npos) ext = filePath.substr(dot);
+    
+    // Конвертируем расширение в обычную строку для заголовка пакета
+    std::string sExt(ext.begin(), ext.end());
+
+    // Формируем заголовок
+    AvatarHeader header;
+    header.type = PACKET_AVATAR_UPDATE;
+    header.fileSize = (uint32_t)size;
+    memset(header.extension, 0, 8);
+    strncpy(header.extension, sExt.c_str(), 7);
+
+    // Отправка (заголовок + данные)
+    if (clientSocket != INVALID_SOCKET) {
+        send(clientSocket, (char*)&header, sizeof(AvatarHeader), 0);
+        send(clientSocket, buffer.data(), (int)size, 0);
+        std::cout << "[Network] Avatar sent, size: " << size << " bytes" << std::endl;
+    }
+}
+
 
 void ParseMessage(const std::string& msg) {
     Message m;
@@ -263,7 +327,46 @@ void ReceiveMessages() {
                 }
             }
         }
+        else if (packetType == PACKET_AVATAR_DATA) {
+            AvatarHeader header;
+            header.type = packetType;
+            if (ReceiveExact((char*)&header + 1, sizeof(AvatarHeader) - 1)) {
+                uint32_t fileSize = header.fileSize;
+                std::cout << "[DEBUG] Receiving avatar, size: " << fileSize << " bytes" << std::endl;
 
+                if (fileSize > 0) {
+                    std::vector<char> fileData(fileSize);
+                    if (ReceiveExact(fileData.data(), fileSize)) {
+                        if (!fs::exists("cache")) fs::create_directories("cache");
+
+                        // ВАЖНО: Убедитесь, что userName к этому моменту уже установлен!
+                        // Создаём уникальное имя файла по username
+                        std::string safeUsername = userName;
+                        std::replace(safeUsername.begin(), safeUsername.end(), '\\', '_');
+                        std::replace(safeUsername.begin(), safeUsername.end(), '/', '_');
+                        std::replace(safeUsername.begin(), safeUsername.end(), ':', '_');
+
+                        std::string localPath = "cache/" + safeUsername + header.extension;
+
+                        // Сохраняем файл
+                        std::ofstream outFile(localPath, std::ios::binary);
+                        if (outFile.is_open()) {
+                            outFile.write(fileData.data(), fileSize);
+                            outFile.close();
+
+                            // ОБНОВЛЯЕМ ОБЕ ПЕРЕМЕННЫЕ
+                            userAvatar = localPath;
+                            g_uiState.userAvatarUrl = localPath; // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+
+                            std::cout << "[Network] Avatar saved to: " << localPath << std::endl;
+                            
+                            if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+                        }
+
+                    }
+                }
+            }
+        }
         else if (packetType == PACKET_USER_PROFILE) {
             UserProfilePacket pPkt;
             pPkt.type = packetType;
@@ -277,14 +380,22 @@ void ReceiveMessages() {
                     g_uiState.userDisplayName = pPkt.username;
                 }
 
+                // Обновляем ОБЕ переменные
                 g_uiState.userAvatarUrl = pPkt.avatar_url;
+                userAvatar = pPkt.avatar_url; // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
 
                 std::cout << "[DEBUG] Profile loaded: " << g_uiState.userDisplayName 
-                          << " Avatar: " << g_uiState.userAvatarUrl << std::endl;
+                        << " Avatar URL: " << g_uiState.userAvatarUrl << std::endl;
 
                 if (hMainWnd) {
                     InvalidateRect(hMainWnd, NULL, FALSE);
                 }
+
+                // Запрашиваем аватар, если URL не пустой
+                if (!g_uiState.userAvatarUrl.empty() && g_uiState.userAvatarUrl != "default") {
+                    RequestAvatar(pPkt.username); // ← ИСПОЛЬЗУЕМ username, а не display_name
+                }
+                
             }
         }
         

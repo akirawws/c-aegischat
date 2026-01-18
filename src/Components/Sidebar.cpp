@@ -196,9 +196,16 @@ LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
     case WM_LBUTTONDOWN: {
         int yPos = HIWORD(lParam);
-        if (yPos >= 14 && yPos <= 58) g_activeIndex = 0;
-        else if (yPos >= 80 && yPos <= 124) g_activeIndex = 1;
-        InvalidateRect(hwnd, NULL, FALSE);
+        int newIndex = g_activeIndex;
+
+        if (yPos >= 14 && yPos <= 58) newIndex = 0;      
+        else if (yPos >= 80 && yPos <= 124) newIndex = 1; 
+
+        if (newIndex != g_activeIndex) {
+            g_activeIndex = newIndex;
+            InvalidateRect(hwnd, NULL, FALSE); 
+            SendMessage(GetParent(hwnd), WM_SIDEBAR_SWITCH, (WPARAM)g_activeIndex, 0);
+        }
         return 0;
     }
 

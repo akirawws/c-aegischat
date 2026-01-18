@@ -6,6 +6,8 @@
 #endif
 #include <winsock2.h>
 #include <windows.h>
+#define WM_SIDEBAR_SWITCH (WM_USER + 101)
+
 
 extern HWND hSidebar;
 

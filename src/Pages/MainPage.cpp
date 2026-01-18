@@ -227,13 +227,21 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         int oldHover = g_hoverIndex;
         g_hoverIndex = -1;
 
-        // Логика для иконок серверов
-        if (x < SIDEBAR_ICONS) {
-            if (y >= 14 && y <= 58) g_hoverIndex = 0;
-            else if (y >= 80 && y <= 124) g_hoverIndex = 1;
-            else if (y >= 136 && y <= 180) g_hoverIndex = 2;
-            // else остаётся -1
+    if (x < SIDEBAR_ICONS) {
+        if (y >= 14 && y <= 58) {
+            g_activeIndex = 0;
+            g_uiState.currentPage = AppPage::Friends; 
+            ShowChatUI(false); 
         }
+        else if (y >= 80 && y <= 124) {
+            g_activeIndex = 1;
+            g_uiState.currentPage = AppPage::DevBlog;
+            ShowChatUI(false); 
+        }
+        
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    }
 
         // Проверка наведения на иконку настроек
         if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
@@ -351,7 +359,7 @@ case WM_LBUTTONDOWN: {
     }
 
 
-    break; // ← ОБЯЗАТЕЛЬНО добавьте break!
+    break; 
 }
 
 case WM_PAINT: {
@@ -377,10 +385,20 @@ case WM_PAINT: {
         // СЛОЙ 3: Второй сайдбар (Список DM)
         DrawSidebarFriends(memDC, hwnd, SIDEBAR_ICONS, 0, SIDEBAR_DM, rect.bottom);
 
-        // СЛОЙ 4: Основной контент (Страница или Чат)
-        if (g_uiState.currentPage == AppPage::Friends) {
-            DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
-        } 
+    if (g_uiState.currentPage == AppPage::Friends) {
+        DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
+    } 
+    else if (g_uiState.currentPage == AppPage::DevBlog) {
+        Graphics gDev(memDC);
+        FontFamily ff(L"Segoe UI");
+        Font font(&ff, 20, FontStyleBold, UnitPixel);
+        SolidBrush white(Color(255, 255, 255));
+        
+        gDev.DrawString(L"Developer Blog Content", -1, &font, 
+                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 20, 20.0f), &white);
+        
+
+    }
         else if (g_uiState.currentPage == AppPage::Messages) {
             // Фон хедера
             HBRUSH hHeaderBr = CreateSolidBrush(RGB(49, 51, 56));
@@ -411,8 +429,6 @@ case WM_PAINT: {
             gHeader.DrawString(L"+", -1, &plusFont, btnRect, &sf, &whiteBrush);
         }
 
-        // СЛОЙ 5 (ВЕРХНИЙ): Панель профиля
-        // Рисуем в самом конце, чтобы перекрыть НИЗ обоих сайдбаров
         {
             Graphics gUI(memDC);
             gUI.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -422,7 +438,6 @@ case WM_PAINT: {
             DrawSidebarProfile(gUI, 0, rect.bottom, totalSidebarWidth, "AdminUser");
         }
 
-        // Вывод на экран
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
 
         SelectObject(memDC, oldBitmap);

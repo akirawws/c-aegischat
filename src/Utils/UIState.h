@@ -6,7 +6,8 @@ enum class AppPage {
     Friends,
     Chat,
     Messages,
-    FriendRequests
+    FriendRequests,
+    DevBlog
 };
 
 struct UIState {

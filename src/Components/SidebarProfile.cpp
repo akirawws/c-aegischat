@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <string>
 
-// Внешняя переменная из Network.cpp
 extern std::string userAvatar;
 
 #ifndef M_PI
@@ -17,11 +16,9 @@ extern std::string userAvatar;
 using namespace Gdiplus;
 namespace fs = std::filesystem;
 
-// Статические переменные для кэширования изображения
 static Gdiplus::Image* g_pCachedAvatar = nullptr;
 static std::string g_lastAvatarPath = "";
 
-// Константа для hover-индекса иконки настроек
 #define SIDEBAR_PROFILE_SETTINGS 998
 
 extern int g_hoverIndex;
@@ -36,16 +33,13 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
     g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
 
-    // 1. Фон профиля
     SolidBrush bgBrush(Color(255, 35, 36, 40));
     g.FillRectangle(&bgBrush, rectX, rectY, rectW, rectH);
 
-    // 2. Логика Аватара
     float avatarSize = 32.0f;
     float margin = (rectH - avatarSize) / 2.0f;
     RectF avatarRect(rectX + 12.0f, rectY + margin, avatarSize, avatarSize);
 
-    // Проверяем, изменился ли путь к аватару
     if (userAvatar != g_lastAvatarPath) {
         if (g_pCachedAvatar) {
             delete g_pCachedAvatar;
@@ -53,12 +47,10 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
         }
         g_lastAvatarPath = userAvatar;
 
-        // Загружаем новый аватар, если путь корректный
         if (!userAvatar.empty() && userAvatar != "[^.^]" && fs::exists(userAvatar)) {
             std::wstring wPath = Utf8ToWide(userAvatar);
             g_pCachedAvatar = Gdiplus::Image::FromFile(wPath.c_str());
-            
-            // Проверка успешной загрузки
+        
             if (g_pCachedAvatar && g_pCachedAvatar->GetLastStatus() != Gdiplus::Ok) {
                 delete g_pCachedAvatar;
                 g_pCachedAvatar = nullptr;
@@ -66,7 +58,6 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
         }
     }
 
-    // Отрисовка аватара с круглой маской
     if (g_pCachedAvatar) {
         GraphicsPath path;
         path.AddEllipse(avatarRect);
@@ -76,7 +67,6 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
         g.DrawImage(g_pCachedAvatar, avatarRect);
         g.Restore(state);
     } else {
-        // Резервный вариант — цветной круг с буквой
         SolidBrush avatarBrush(Color(255, 88, 101, 242));
         g.FillEllipse(&avatarBrush, avatarRect);
         
@@ -93,8 +83,6 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
             g.DrawString(firstLetter.c_str(), -1, &letterFont, avatarRect, &sf, &whiteBrush);
         }
     }
-
-    // 3. Имя и статус
     std::string nameToDraw = g_uiState.userDisplayName.empty() ? fallbackName : g_uiState.userDisplayName;
     std::wstring wname = Utf8ToWide(nameToDraw);
 
@@ -109,7 +97,6 @@ void DrawSidebarProfile(Graphics& g, int x, int windowHeight, int totalWidth, co
     g.DrawString(wname.c_str(), -1, &nameFont, PointF(textX, rectY + (rectH / 2.0f) - 16.0f), &whiteBrush);
     g.DrawString(L"В сети", -1, &statusFont, PointF(textX, rectY + (rectH / 2.0f) + 2.0f), &grayBrush);
 
-    // 4. Иконка настроек (Шестеренка)
     const REAL ICON_SIZE = 24.0f;
     REAL iconRight = rectX + rectW - 12.0f - ICON_SIZE;
     REAL iconTop = rectY + (rectH - ICON_SIZE) / 2.0f;

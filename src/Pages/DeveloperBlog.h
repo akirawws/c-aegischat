@@ -1,5 +1,8 @@
 #pragma once
 #include <windows.h>
 
-void RegisterDeveloperBlogClass();
-LRESULT CALLBACK DeveloperBlogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+// Глобальная переменная для высоты контента (нужна для ограничения скролла)
+extern int g_totalBlogHeight; 
+
+// Функция отрисовки принимает текущий оффсет скролла
+void DrawDeveloperBlogPage(HDC memDC, RECT rect, int startX, int scrollOffset);

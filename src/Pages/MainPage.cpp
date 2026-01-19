@@ -1,27 +1,40 @@
+// =============================================================
+// ВАЖНО: winsock2.h должен быть первым!
+// =============================================================
+#include <winsock2.h> 
+#include <windows.h>
 #include <map>
 #include <string>
-
-
-#include "MainPage.h"
-#include "Utils/Styles.h"
-#include "Components/MessageInput.h"
-#include "Components/Sidebar.h"
-#include "Pages/FriendsPage.h"
-#include "Pages/MessagePage.h"
-#include "Components/SidebarFriends.h"
-#include "Components/SidebarProfile.h"
-#include "Utils/Keyboard.h"
-#include "Utils/Network.h"
-#include "Utils/UIState.h"
 #include <vector>
 #include <commctrl.h>
 #include <gdiplus.h>
-#include "Components/MessageList.h"
-#include <Utils/Utils.h>
-#include "Components/Settings.h" 
+
+// =============================================================
+// ПОДКЛЮЧЕНИЕ ЗАГОЛОВКОВ ПРОЕКТА
+// =============================================================
+#include "MainPage.h"
+#include "Utils/Styles.h"
+#include "Utils/Utils.h"
+#include "Utils/Keyboard.h"
+#include "Utils/Network.h"
+#include "Utils/UIState.h"
 #include "Utils/Messages.h"
+#include "Components/MessageInput.h"
+#include "Components/Sidebar.h"
+#include "Components/SidebarFriends.h"
+#include "Components/SidebarProfile.h"
+#include "Components/MessageList.h"
+#include "Components/Settings.h" 
+#include "Pages/FriendsPage.h"
+#include "Pages/MessagePage.h"
+// ВАЖНО: Подключаем заголовок блога
+#include "DeveloperBlog.h" 
+
 using namespace Gdiplus; 
 
+// =============================================================
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// =============================================================
 extern std::map<std::string, ChatCache> chatHistories;
 extern std::vector<Message> messages; 
 extern std::string activeChatUser; 
@@ -29,21 +42,35 @@ extern std::vector<DMUser> dmUsers;
 extern Gdiplus::Image* g_pMainIcon;
 extern int g_activeIndex;
 extern int g_hoverIndex;
-
-#define SIDEBAR_PROFILE_SETTINGS 998
-bool IsClickOnSettingsIcon(int x, int y, int sidebarX, int windowHeight, int totalWidth);
-
-HWND hMainWnd = NULL;
-const int SIDEBAR_ICONS = 72;
-const int SIDEBAR_DM    = 240;
-static int hoveredIndex = -1;
-int g_scrollOffset = 0;          
-int g_totalMessageHeight = 0;    
-const int MESSAGE_HEIGHT = 24;   
-
 extern int inputEditHeight;
 extern HWND hInputEdit; 
 extern HWND hMessageList;
+
+// Переменные для скролла
+int g_blogScroll = 0;           // Скролл для блога
+int g_scrollOffset = 0;         // Скролл для чата
+int g_totalMessageHeight = 0;   
+const int MESSAGE_HEIGHT = 24; 
+
+// Константы
+const int SIDEBAR_ICONS = 72;
+const int SIDEBAR_DM    = 240;
+#define SIDEBAR_PROFILE_SETTINGS 998
+
+// Локальные переменные
+HWND hMainWnd = NULL;
+static int hoveredIndex = -1;
+
+// =============================================================
+// ОБЪЯВЛЕНИЯ ФУНКЦИЙ
+// =============================================================
+bool IsClickOnSettingsIcon(int x, int y, int sidebarX, int windowHeight, int totalWidth);
+void OpenAddMembersDialog(HWND parent);
+void RequestCreateGroup(const std::vector<std::string>& members); // Убедитесь, что эта функция объявлена в Network.h
+
+// =============================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// =============================================================
 
 LRESULT CALLBACK MessageInputSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (uMsg == WM_CHAR && wParam == VK_RETURN) {
@@ -66,10 +93,6 @@ HWND CreateMainPage(HINSTANCE hInstance, int x, int y, int width, int height) {
     return hMainWnd;
 }
 
-void OpenAddMembersDialog(HWND parent) {}
-
-
-
 void CenterWindow(HWND hwnd, HWND hwndParent) {
     RECT rect, rectP;
     GetWindowRect(hwnd, &rect);
@@ -77,17 +100,23 @@ void CenterWindow(HWND hwnd, HWND hwndParent) {
 
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
-
     int parentWidth = rectP.right - rectP.left;
     int parentHeight = rectP.bottom - rectP.top;
-
     int x = rectP.left + (parentWidth - width) / 2;
     int y = rectP.top + (parentHeight - height) / 2;
 
     SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
-extern std::vector<DMUser> dmUsers; 
+void ShowChatUI(bool show) {
+    int cmd = show ? SW_SHOW : SW_HIDE;
+    if (hInputEdit) ShowWindow(hInputEdit, cmd);
+    if (hMessageList) ShowWindow(hMessageList, cmd); 
+}
+
+// =============================================================
+// ДИАЛОГ СОЗДАНИЯ ГРУППЫ
+// =============================================================
 LRESULT CALLBACK CreateGroupDlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CTLCOLORLISTBOX: {
@@ -176,15 +205,43 @@ void OpenCreateGroupDialog(HWND parent) {
     EnableWindow(parent, FALSE); 
 }
 
-
-void ShowChatUI(bool show) {
-    int cmd = show ? SW_SHOW : SW_HIDE;
-    if (hInputEdit) ShowWindow(hInputEdit, cmd);
-    if (hMessageList) ShowWindow(hMessageList, cmd); 
-}
-
+// =============================================================
+// ГЛАВНАЯ ПРОЦЕДУРА ОКНА (MainWndProc)
+// =============================================================
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+
+    case WM_CREATE: {
+        int startX = SIDEBAR_ICONS + SIDEBAR_DM;
+
+        // Загрузка иконки
+        if (g_pMainIcon == NULL) {
+            g_pMainIcon = Gdiplus::Image::FromFile(L"assets/icon.png");
+            if (g_pMainIcon && g_pMainIcon->GetLastStatus() != Gdiplus::Ok) {
+                OutputDebugStringA("Aegis Error: Failed to load assets/icon.png\n");
+            }
+        }
+
+        // Окно списка сообщений (изначально скрыто)
+        hMessageList = CreateWindowExA(
+            0, "MessageListWindow", NULL,
+            WS_CHILD | WS_CLIPSIBLINGS | WS_VSCROLL, 
+            startX, 48, 100, 100,
+            hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL
+        );
+
+        // Поле ввода (изначально скрыто)
+        CreateMessageInput(hwnd, startX + 10, 100, 100, INPUT_MIN_HEIGHT);
+        if (hInputEdit) {
+            SetWindowSubclass(hInputEdit, MessageInputSubclass, 0, (DWORD_PTR)hwnd);
+        }
+
+        g_uiState.currentPage = AppPage::Friends; // Стартовая страница
+        g_uiState.activeChatUser = "";
+        
+        ShowChatUI(false); 
+        return 0;
+    }
 
     case WM_COMMAND: {
         if (LOWORD(wParam) == 1001) {
@@ -193,21 +250,17 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         else if (LOWORD(wParam) == 2002) {
             HWND hDlg = GetParent((HWND)lParam);
             HWND hList = GetDlgItem(hDlg, 2001);
-            
             int count = SendMessage(hList, LB_GETSELCOUNT, 0, 0);
             if (count > 0) {
                 std::vector<int> selections(count);
                 SendMessage(hList, LB_GETSELITEMS, count, (LPARAM)selections.data());
-
                 std::vector<std::string> selectedMembers;
                 for (int idx : selections) {
                     char buffer[64];
                     SendMessageA(hList, LB_GETTEXT, idx, (LPARAM)buffer);
                     selectedMembers.push_back(buffer);
                 }
-
                 RequestCreateGroup(selectedMembers); 
-                
                 EnableWindow(hMainWnd, TRUE); 
                 DestroyWindow(hDlg);
             } else {
@@ -216,154 +269,130 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
-case WM_MOUSEMOVE: {
-    int x = LOWORD(lParam);
-    int y = HIWORD(lParam);
-    
-    RECT clientRect;
-    GetClientRect(hwnd, &clientRect);
 
-    int oldHover = g_hoverIndex;
-    g_hoverIndex = -1;
+    case WM_MOUSEMOVE: {
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        RECT clientRect;
+        GetClientRect(hwnd, &clientRect);
 
-    // Только определяем hover — НЕ переключаем страницы!
-    if (x < SIDEBAR_ICONS) {
-        if (y >= 14 && y <= 58) {
-            g_hoverIndex = 0;
+        int oldHover = g_hoverIndex;
+        g_hoverIndex = -1;
+
+        if (x < SIDEBAR_ICONS) {
+            if (y >= 14 && y <= 58) g_hoverIndex = 0;
+            else if (y >= 80 && y <= 124) g_hoverIndex = 1;
         }
-        else if (y >= 80 && y <= 124) {
-            g_hoverIndex = 1;
+
+        if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+            g_hoverIndex = SIDEBAR_PROFILE_SETTINGS;
         }
+
+        if (oldHover != g_hoverIndex) {
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        break;
     }
 
-    // Проверка наведения на иконку настроек
-    if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-        g_hoverIndex = SIDEBAR_PROFILE_SETTINGS;
-    }
+    case WM_LBUTTONDOWN: {
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        RECT rect;
+        GetClientRect(hwnd, &rect);
 
-    if (oldHover != g_hoverIndex) {
-        InvalidateRect(hwnd, NULL, FALSE);
-    }
-    break;
-}
+        // 1. Настройки
+        if (IsClickOnSettingsIcon(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+            OpenSettingsDialog(hwnd);
+            return 0;
+        }
 
-case WM_CREATE: {
-            int startX = SIDEBAR_ICONS + SIDEBAR_DM;
+        // 2. Профиль
+        if (IsClickOnProfile(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+            return 0; 
+        }
 
-            if (g_pMainIcon == NULL) {
-                g_pMainIcon = Gdiplus::Image::FromFile(L"assets/icon.png");
-                
-                // Проверка: если иконка не загрузилась, вы увидите сообщение в отладчике
-                if (g_pMainIcon && g_pMainIcon->GetLastStatus() != Gdiplus::Ok) {
-                    OutputDebugStringA("Aegis Error: Failed to load assets/icon.png\n");
+        // 3. ПЕРВАЯ КОЛОНКА (Сайдбар иконок)
+        if (x < SIDEBAR_ICONS) {
+            if (y >= 14 && y <= 58) {
+                // Клик по "Главной" (Discord Icon)
+                g_activeIndex = 0;
+                g_uiState.currentPage = AppPage::Friends;
+                ShowChatUI(false);
+            }
+            else if (y >= 80 && y <= 124) {
+                // Клик по "Dev Blog"
+                g_activeIndex = 1;
+                g_uiState.currentPage = AppPage::DevBlog;
+                g_blogScroll = 0; // Сбрасываем скролл
+                ShowChatUI(false);
+            }
+            InvalidateRect(hwnd, NULL, TRUE);
+            return 0;
+        }
+
+        // 4. ВТОРАЯ КОЛОНКА (Список друзей / Чатов)
+        if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
+            HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
+            
+            if (g_uiState.currentPage == AppPage::Messages) {
+                messages = chatHistories[g_uiState.activeChatUser].messages;
+                ShowChatUI(true);
+                if (hMessageList) {
+                    InvalidateRect(hMessageList, NULL, TRUE);
+                    ScrollMessagesToBottom();
                 }
+            } else {
+                ShowChatUI(false);
             }
-
-            hMessageList = CreateWindowExA(
-                0, "MessageListWindow", NULL,
-                WS_CHILD | WS_VISIBLE | WS_VSCROLL, 
-                startX, 48, 100, 100, // Изменил y на 48, чтобы не перекрывать будущий хедер
-                hwnd, NULL, (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE), NULL
-            );
-
-            CreateMessageInput(hwnd, startX + 10, 100, 100, INPUT_MIN_HEIGHT);
-            
-            if (hInputEdit) {
-                SetWindowSubclass(hInputEdit, MessageInputSubclass, 0, (DWORD_PTR)hwnd);
-            }
-
-            g_uiState.currentPage = AppPage::Friends;
-            g_uiState.activeChatUser = "";
-            
-            ShowChatUI(false); 
+            InvalidateRect(hwnd, NULL, TRUE);
             return 0;
-        }
-case WM_UNLOCK_PARENT: {
-    // Отложите фокус на следующий цикл
-    PostMessageW(hwnd, WM_USER + 200, 0, 0);
-    break;
-}
+        } 
 
-case WM_USER + 200: {
-    EnableWindow(hwnd, TRUE);
-    SetFocus(hwnd);
-    InvalidateRect(hwnd, NULL, TRUE);
-    break;
-}
-case WM_LBUTTONDOWN: {
-    int x = LOWORD(lParam);
-    int y = HIWORD(lParam);
-    RECT rect;
-    GetClientRect(hwnd, &rect);
-
-    // 1. Проверка клика по иконке настроек
-    if (IsClickOnSettingsIcon(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-        OpenSettingsDialog(hwnd);
-        return 0;
-    }
-
-    // 2. Проверка клика по профилю
-    if (IsClickOnProfile(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-        return 0; 
-    }
-
-    // 3. ПЕРВАЯ КОЛОНКА (Переключение между Главной и DevBlog)
-    if (x < SIDEBAR_ICONS) {
-        AppPage oldPage = g_uiState.currentPage;
-        
-        if (y >= 14 && y <= 58) {
-            g_activeIndex = 0;
-            g_uiState.currentPage = AppPage::Friends;
-        }
-        else if (y >= 80 && y <= 124) {
-            g_activeIndex = 1;
-            g_uiState.currentPage = AppPage::DevBlog;
-        }
-
-        if (oldPage != g_uiState.currentPage) {
-            ShowChatUI(false); // Скрываем чат при любом переключении здесь
-            InvalidateRect(hwnd, NULL, TRUE); // TRUE, чтобы полностью перетереть старый контент
-        }
-        return 0;
-    }
-
-    // 4. ВТОРАЯ КОЛОНКА (DM / Список друзей)
-    if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
-        HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
-        
+        // 5. ОСНОВНОЙ КОНТЕНТ (Кнопки внутри страниц)
         if (g_uiState.currentPage == AppPage::Messages) {
-            messages = chatHistories[g_uiState.activeChatUser].messages;
-            ShowChatUI(true);
-            if (hMessageList) {
-                InvalidateRect(hMessageList, NULL, TRUE);
-                ScrollMessagesToBottom();
+            int btnX = rect.right - 50;
+            int btnY = 9;
+            if (x >= btnX && x <= btnX + 30 && y >= btnY && y <= btnY + 30) {
+                OpenCreateGroupDialog(hwnd);
+                return 0;
             }
-        } else {
-            ShowChatUI(false);
+        } 
+        else if (g_uiState.currentPage == AppPage::Friends) {
+            HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
+            HandleFriendsClick(hwnd, x, y, hInstance);
+            InvalidateRect(hwnd, NULL, FALSE);
         }
-        InvalidateRect(hwnd, NULL, TRUE);
         return 0;
-    } 
-
-    // 5. Логика хедера и основного контента (оставляем как было)
-    if (g_uiState.currentPage == AppPage::Messages) {
-        int btnX = rect.right - 50;
-        int btnY = 9;
-        if (x >= btnX && x <= btnX + 30 && y >= btnY && y <= btnY + 30) {
-            OpenCreateGroupDialog(hwnd);
-            return 0;
-        }
-    } 
-    else if (g_uiState.currentPage == AppPage::Friends) {
-        HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
-        HandleFriendsClick(hwnd, x, y, hInstance);
-        InvalidateRect(hwnd, NULL, FALSE);
     }
 
-    return 0;
-}
+    case WM_MOUSEWHEEL: {
+        short delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        
+        if (g_uiState.currentPage == AppPage::DevBlog) {
+            // --- СКРОЛЛ ДЛЯ БЛОГА ---
+            int scrollSpeed = delta / 2; 
+            g_blogScroll -= scrollSpeed;
 
-case WM_PAINT: {
+            RECT r; GetClientRect(hwnd, &r);
+            extern int g_totalBlogHeight; // Из DeveloperBlog.cpp
+            int maxScroll = g_totalBlogHeight - r.bottom + 50; 
+            if (maxScroll < 0) maxScroll = 0;
+
+            if (g_blogScroll < 0) g_blogScroll = 0;
+            if (g_blogScroll > maxScroll) g_blogScroll = maxScroll;
+
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (g_uiState.currentPage == AppPage::Messages) {
+            // --- СКРОЛЛ ДЛЯ ЧАТА ---
+            g_scrollOffset -= delta;
+            g_scrollOffset = std::max(0, std::min(g_scrollOffset, std::max(0, g_totalMessageHeight - (HIWORD(lParam) - LOWORD(lParam)))));
+            if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
+        }
+        break;
+    }
+
+    case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rect;
@@ -374,44 +403,24 @@ case WM_PAINT: {
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
         HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
-        // СЛОЙ 1: Общий фон
+        // Фон
         HBRUSH hBg = CreateSolidBrush(RGB(32, 34, 37)); 
         FillRect(memDC, &rect, hBg);
         DeleteObject(hBg);
 
-        // СЛОЙ 2: Первый сайдбар (Иконки серверов)
-        // Рисуем функцию напрямую из Sidebar.cpp (нужно пробросить OnPaintSidebar)
+        // Сайдбары
         OnPaintSidebar(memDC, SIDEBAR_ICONS, rect.bottom);
-
-        // СЛОЙ 3: Второй сайдбар (Список DM)
         DrawSidebarFriends(memDC, hwnd, SIDEBAR_ICONS, 0, SIDEBAR_DM, rect.bottom);
 
-    if (g_uiState.currentPage == AppPage::Friends) {
-        DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
-    } 
-    else if (g_uiState.currentPage == AppPage::DevBlog) {
-        // Закрашиваем правую часть, чтобы скрыть остатки списка друзей
-        RECT contentRect = { SIDEBAR_ICONS + SIDEBAR_DM, 0, rect.right, rect.bottom };
-        HBRUSH hContentBg = CreateSolidBrush(RGB(47, 49, 54)); // Цвет фона Discord
-        FillRect(memDC, &contentRect, hContentBg);
-        DeleteObject(hContentBg);
-
-        Graphics gDev(memDC);
-        gDev.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-        
-        FontFamily ff(L"Segoe UI");
-        Font font(&ff, 24, FontStyleBold, UnitPixel);
-        SolidBrush white(Color(255, 255, 255));
-        
-        gDev.DrawString(L"Developer Blog", -1, &font, 
-                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 30, 30.0f), &white);
-                        
-        Font smallFont(&ff, 14, FontStyleRegular, UnitPixel);
-        gDev.DrawString(L"Добро пожаловать в блог разработчика AEGIS!", -1, &smallFont, 
-                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 30, 70.0f), &white);
-    }
+        // Контент
+        if (g_uiState.currentPage == AppPage::Friends) {
+            DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
+        } 
+        else if (g_uiState.currentPage == AppPage::DevBlog) {
+            DrawDeveloperBlogPage(memDC, rect, SIDEBAR_ICONS + SIDEBAR_DM, g_blogScroll);
+        }
         else if (g_uiState.currentPage == AppPage::Messages) {
-            // Фон хедера
+            // Хедер чата
             HBRUSH hHeaderBr = CreateSolidBrush(RGB(49, 51, 56));
             RECT headerRect = { SIDEBAR_ICONS + SIDEBAR_DM, 0, rect.right, 48 };
             FillRect(memDC, &headerRect, hHeaderBr);
@@ -420,13 +429,11 @@ case WM_PAINT: {
             Graphics gHeader(memDC);
             gHeader.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
 
-            // Текст хедера
             std::wstring title = Utf8ToWide(g_uiState.activeChatUser);
             FontFamily fontFamily(L"Segoe UI");
             Font headerFont(&fontFamily, 16, FontStyleBold, UnitPixel);
             SolidBrush whiteBrush(Color(255, 255, 255));
-            gHeader.DrawString(title.c_str(), -1, &headerFont, 
-                               PointF((REAL)headerRect.left + 20, 14.0f), &whiteBrush);
+            gHeader.DrawString(title.c_str(), -1, &headerFont, PointF((REAL)headerRect.left + 20, 14.0f), &whiteBrush);
 
             // Кнопка "+"
             RectF btnRect((REAL)rect.right - 50, 9.0f, 30.0f, 30.0f);
@@ -440,59 +447,57 @@ case WM_PAINT: {
             gHeader.DrawString(L"+", -1, &plusFont, btnRect, &sf, &whiteBrush);
         }
 
+        // Профиль (поверх всего)
         {
             Graphics gUI(memDC);
             gUI.SetSmoothingMode(SmoothingModeAntiAlias);
             gUI.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
-
             int totalSidebarWidth = SIDEBAR_ICONS + SIDEBAR_DM;
             DrawSidebarProfile(gUI, 0, rect.bottom, totalSidebarWidth, "AdminUser");
         }
 
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
-
         SelectObject(memDC, oldBitmap);
         DeleteObject(memBitmap);
         DeleteDC(memDC);
         EndPaint(hwnd, &ps);
         break;
     }
+
     case WM_SIZE: {
-            int width  = LOWORD(lParam);
-            int height = HIWORD(lParam);
-            int chatX = SIDEBAR_ICONS + SIDEBAR_DM;
-            int chatW = width - chatX;
+        int width  = LOWORD(lParam);
+        int height = HIWORD(lParam);
+        int chatX = SIDEBAR_ICONS + SIDEBAR_DM;
+        int chatW = width - chatX;
+        int inputY = height - inputEditHeight - 20;
 
-            int inputY = height - inputEditHeight - 20;
-            if (hInputEdit) {
-                MoveWindow(hInputEdit, chatX + 20, inputY, chatW - 40, inputEditHeight, TRUE);
-            }
-
-            if (hMessageList) {
-                MoveWindow(hMessageList, chatX, 48, chatW, inputY - 58, TRUE);
-            }
-
-            InvalidateRect(hwnd, NULL, FALSE);
-            break;
+        if (hInputEdit) {
+            MoveWindow(hInputEdit, chatX + 20, inputY, chatW - 40, inputEditHeight, TRUE);
         }
-  case WM_MOUSEWHEEL: {
-    short delta = GET_WHEEL_DELTA_WPARAM(wParam);
-    g_scrollOffset -= delta; // прокрутка вверх-вниз
-    g_scrollOffset = std::max(0, std::min(g_scrollOffset, std::max(0, g_totalMessageHeight - (HIWORD(lParam) - LOWORD(lParam)))));
-    if (hMessageList) InvalidateRect(hMessageList, NULL, TRUE);
-    break;
-}
+        if (hMessageList) {
+            MoveWindow(hMessageList, chatX, 48, chatW, inputY - 58, TRUE);
+        }
+        InvalidateRect(hwnd, NULL, FALSE);
+        break;
+    }
 
     case WM_CTLCOLOREDIT: {
-            HDC hdcEdit = (HDC)wParam;
-            if ((HWND)lParam == hInputEdit) {
-                SetTextColor(hdcEdit, RGB(220, 221, 222));   
-                SetBkColor(hdcEdit, RGB(56, 58, 64));       
-                static HBRUSH hBrEdit = CreateSolidBrush(RGB(56, 58, 64));
-                return (INT_PTR)hBrEdit;
-            }
-            break;
+        HDC hdcEdit = (HDC)wParam;
+        if ((HWND)lParam == hInputEdit) {
+            SetTextColor(hdcEdit, RGB(220, 221, 222));   
+            SetBkColor(hdcEdit, RGB(56, 58, 64));       
+            static HBRUSH hBrEdit = CreateSolidBrush(RGB(56, 58, 64));
+            return (INT_PTR)hBrEdit;
         }
+        break;
+    }
+
+    case WM_USER + 200: {
+        EnableWindow(hwnd, TRUE);
+        SetFocus(hwnd);
+        InvalidateRect(hwnd, NULL, TRUE);
+        break;
+    }
 
     case WM_DESTROY:
         PostQuitMessage(0);

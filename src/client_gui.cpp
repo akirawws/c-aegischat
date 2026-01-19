@@ -32,6 +32,7 @@ void RegisterWindowClass(const char* className, WNDPROC proc) {
     WriteLog("Registering class: " + std::string(className));
     WNDCLASSA wc = {};
     wc.lpfnWndProc = proc;
+    wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = className;
     wc.hbrBackground = CreateSolidBrush(COLOR_BG_DARK); 

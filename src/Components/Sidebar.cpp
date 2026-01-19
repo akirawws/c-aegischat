@@ -144,12 +144,23 @@ void OnPaintSidebar(HDC hdc, int width, int height) {
     int y = 36;
 
     DrawSidebarItem(g, centerX, y, L"", false, g_activeIndex == 0, g_hoverIndex == 0, g_pMainIcon);
-    
     y += 66; 
     DrawSidebarItem(g, centerX, y, L"dev", false, g_activeIndex == 1, g_hoverIndex == 1, NULL);
-    
     y += 56;
     DrawSidebarItem(g, centerX, y, L"", true, false, g_hoverIndex == 2, NULL);
+
+    FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font versionFont(&fontFamily, 9, FontStyleRegular, UnitPoint);
+    SolidBrush versionBrush(Color(200, 255, 255, 255)); 
+    
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    format.SetLineAlignment(StringAlignmentFar); 
+
+    int profileHeight = 55; 
+    RectF versionRect(0, 0, (REAL)width, (REAL)height - profileHeight);
+    
+    g.DrawString(L"v1.7.0", -1, &versionFont, versionRect, &format, &versionBrush);
 }
 
 LRESULT CALLBACK SidebarWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {

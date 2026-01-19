@@ -216,49 +216,40 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
-    case WM_MOUSEMOVE: {
-        int x = LOWORD(lParam);
-        int y = HIWORD(lParam);
-        
-        // Получаем размеры окна
-        RECT clientRect;
-        GetClientRect(hwnd, &clientRect);
+case WM_MOUSEMOVE: {
+    int x = LOWORD(lParam);
+    int y = HIWORD(lParam);
+    
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
 
-        int oldHover = g_hoverIndex;
-        g_hoverIndex = -1;
+    int oldHover = g_hoverIndex;
+    g_hoverIndex = -1;
 
+    // Только определяем hover — НЕ переключаем страницы!
     if (x < SIDEBAR_ICONS) {
         if (y >= 14 && y <= 58) {
-            g_activeIndex = 0;
-            g_uiState.currentPage = AppPage::Friends; 
-            ShowChatUI(false); 
+            g_hoverIndex = 0;
         }
         else if (y >= 80 && y <= 124) {
-            g_activeIndex = 1;
-            g_uiState.currentPage = AppPage::DevBlog;
-            ShowChatUI(false); 
+            g_hoverIndex = 1;
         }
-        
+    }
+
+    // Проверка наведения на иконку настроек
+    if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+        g_hoverIndex = SIDEBAR_PROFILE_SETTINGS;
+    }
+
+    if (oldHover != g_hoverIndex) {
         InvalidateRect(hwnd, NULL, FALSE);
-        return 0;
     }
-
-        // Проверка наведения на иконку настроек
-        if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-            g_hoverIndex = SIDEBAR_PROFILE_SETTINGS;
-        }
-
-        if (oldHover != g_hoverIndex) {
-            InvalidateRect(hwnd, NULL, FALSE);
-        }
-        break;
-    }
+    break;
+}
 
 case WM_CREATE: {
             int startX = SIDEBAR_ICONS + SIDEBAR_DM;
 
-            // ИНИЦИАЛИЗАЦИЯ ИКОНКИ САЙДБАРА
-            // Так как дочернее окно удалено, загружаем ресурс в главном окне
             if (g_pMainIcon == NULL) {
                 g_pMainIcon = Gdiplus::Image::FromFile(L"assets/icon.png");
                 
@@ -304,29 +295,42 @@ case WM_LBUTTONDOWN: {
     int y = HIWORD(lParam);
     RECT rect;
     GetClientRect(hwnd, &rect);
-    RECT clientRect;
-        GetClientRect(hwnd, &clientRect);
-        if (IsClickOnSettingsIcon(x, y, 0, clientRect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
-            OpenSettingsDialog(hwnd);
-            return 0;
-        }
 
-    // 1. Проверка клика по профилю
+    // 1. Проверка клика по иконке настроек
+    if (IsClickOnSettingsIcon(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
+        OpenSettingsDialog(hwnd);
+        return 0;
+    }
+
+    // 2. Проверка клика по профилю
     if (IsClickOnProfile(x, y, 0, rect.bottom, SIDEBAR_ICONS + SIDEBAR_DM)) {
         return 0; 
     }
 
-    // 2. Логика клика по первой колонке (Иконки серверов)
+    // 3. ПЕРВАЯ КОЛОНКА (Переключение между Главной и DevBlog)
     if (x < SIDEBAR_ICONS) {
-        if (y >= 14 && y <= 58) g_activeIndex = 0;
-        else if (y >= 80 && y <= 124) g_activeIndex = 1;
-        InvalidateRect(hwnd, NULL, FALSE);
+        AppPage oldPage = g_uiState.currentPage;
+        
+        if (y >= 14 && y <= 58) {
+            g_activeIndex = 0;
+            g_uiState.currentPage = AppPage::Friends;
+        }
+        else if (y >= 80 && y <= 124) {
+            g_activeIndex = 1;
+            g_uiState.currentPage = AppPage::DevBlog;
+        }
+
+        if (oldPage != g_uiState.currentPage) {
+            ShowChatUI(false); // Скрываем чат при любом переключении здесь
+            InvalidateRect(hwnd, NULL, TRUE); // TRUE, чтобы полностью перетереть старый контент
+        }
         return 0;
     }
 
-    // 3. Логика клика по второй колонке (Список DM / Друзей)
+    // 4. ВТОРАЯ КОЛОНКА (DM / Список друзей)
     if (x >= SIDEBAR_ICONS && x <= SIDEBAR_ICONS + SIDEBAR_DM) {
         HandleSidebarFriendsClick(hwnd, x - SIDEBAR_ICONS, y);
+        
         if (g_uiState.currentPage == AppPage::Messages) {
             messages = chatHistories[g_uiState.activeChatUser].messages;
             ShowChatUI(true);
@@ -337,11 +341,11 @@ case WM_LBUTTONDOWN: {
         } else {
             ShowChatUI(false);
         }
-        InvalidateRect(hwnd, NULL, FALSE);
+        InvalidateRect(hwnd, NULL, TRUE);
         return 0;
     } 
 
-    // 4. Логика клика по хедеру (Кнопка создания группы)
+    // 5. Логика хедера и основного контента (оставляем как было)
     if (g_uiState.currentPage == AppPage::Messages) {
         int btnX = rect.right - 50;
         int btnY = 9;
@@ -350,16 +354,13 @@ case WM_LBUTTONDOWN: {
             return 0;
         }
     } 
-
-    // 5. Логика клика по основному контенту (Страница друзей)
-    if (g_uiState.currentPage == AppPage::Friends) {
+    else if (g_uiState.currentPage == AppPage::Friends) {
         HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
         HandleFriendsClick(hwnd, x, y, hInstance);
         InvalidateRect(hwnd, NULL, FALSE);
     }
 
-
-    break; 
+    return 0;
 }
 
 case WM_PAINT: {
@@ -389,15 +390,25 @@ case WM_PAINT: {
         DrawFriendsPage(memDC, hwnd, rect.right, rect.bottom); 
     } 
     else if (g_uiState.currentPage == AppPage::DevBlog) {
+        // Закрашиваем правую часть, чтобы скрыть остатки списка друзей
+        RECT contentRect = { SIDEBAR_ICONS + SIDEBAR_DM, 0, rect.right, rect.bottom };
+        HBRUSH hContentBg = CreateSolidBrush(RGB(47, 49, 54)); // Цвет фона Discord
+        FillRect(memDC, &contentRect, hContentBg);
+        DeleteObject(hContentBg);
+
         Graphics gDev(memDC);
+        gDev.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+        
         FontFamily ff(L"Segoe UI");
-        Font font(&ff, 20, FontStyleBold, UnitPixel);
+        Font font(&ff, 24, FontStyleBold, UnitPixel);
         SolidBrush white(Color(255, 255, 255));
         
-        gDev.DrawString(L"Developer Blog Content", -1, &font, 
-                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 20, 20.0f), &white);
-        
-
+        gDev.DrawString(L"Developer Blog", -1, &font, 
+                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 30, 30.0f), &white);
+                        
+        Font smallFont(&ff, 14, FontStyleRegular, UnitPixel);
+        gDev.DrawString(L"Добро пожаловать в блог разработчика AEGIS!", -1, &smallFont, 
+                        PointF((REAL)SIDEBAR_ICONS + SIDEBAR_DM + 30, 70.0f), &white);
     }
         else if (g_uiState.currentPage == AppPage::Messages) {
             // Фон хедера

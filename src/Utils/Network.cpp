@@ -334,10 +334,9 @@ void ReceiveMessages() {
                 cache.messages.push_back(m);
 
                 if (g_uiState.activeChatUser == chatKey) {
-                    messages.push_back(m);
                     if (hMessageList) {
                         InvalidateRect(hMessageList, NULL, TRUE);
-                        PostMessage(hMessageList, WM_VSCROLL, SB_BOTTOM, 0);
+                        ScrollMessagesToBottom(); // ← вызываем скролл
                     }
                 }
 
@@ -529,7 +528,6 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
         chatHistories[target].messages.push_back(m);
 
         if (g_uiState.activeChatUser == target) {
-            messages.push_back(m);   
         }
 
         InvalidateRect(hMessageList, NULL, TRUE);
@@ -579,6 +577,9 @@ void SendPrivateMessageFromUI() {
         
         InvalidateRect(hMessageList, NULL, TRUE);
         if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+        if (hMessageList) {
+    ScrollMessagesToBottom();
+}
     } else {
         isConnected = false;
         MessageBoxA(hMainWnd, "Соединение разорвано!", "Ошибка", MB_OK | MB_ICONERROR);

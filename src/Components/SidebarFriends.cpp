@@ -25,7 +25,9 @@ extern void ShowChatUI(bool show);
 extern void RequestChatHistory(const std::string& target, int offset);
 extern HWND hMessageList; 
 extern UIState g_uiState;
-extern std::string g_cacheDir; // ← добавьте, если ещё не объявлено
+extern std::string g_cacheDir; 
+extern void ScrollMessagesToBottom();
+
 
 static int hoveredIndex = -1;
 const int ITEM_HEIGHT = 44;
@@ -183,23 +185,30 @@ void HandleSidebarFriendsClick(HWND hwnd, int x, int y) {
     }
     
     cy += BUTTON_HEIGHT + BUTTON_SPACING + 10 + 25; 
+
     for (auto& u : dmUsers) {
-            if (y >= cy && y <= cy + ITEM_HEIGHT) {
-                if (g_uiState.activeChatUser == u.username) return;
-                g_uiState.activeChatUser = u.username;
-                g_uiState.currentPage = AppPage::Messages;
-                messages.clear();
-                if (chatHistories.count(u.username)) {
-                    messages = chatHistories[u.username];
-                }
-                g_historyOffset = 0;
-                g_isLoadingHistory = false; 
-                RequestChatHistory(u.username, 0); 
-                ShowChatUI(true);
-                scrollPos = 0; 
-                InvalidateRect(hwnd, NULL, FALSE);
-                return;
-            }
+        // SidebarFriends.cpp в цикле обработки клика:
+        if (y >= cy && y <= cy + ITEM_HEIGHT) {
+            if (g_uiState.activeChatUser == u.username) return;
+
+            g_uiState.activeChatUser = u.username;
+            g_uiState.currentPage = AppPage::Messages;
+
+            // Загружаем из кэша
+            messages = chatHistories[u.username];
+
+            g_historyOffset = 0;
+            g_isLoadingHistory = false; 
+            RequestChatHistory(u.username, 0); 
+            
+            ShowChatUI(true);
+
+            // Скроллим вниз МГНОВЕННО
+            ScrollMessagesToBottom(); 
+
+            InvalidateRect(hwnd, NULL, FALSE);
+            return;
+        }
         cy += ITEM_HEIGHT + ITEM_SPACING;
     }
 }

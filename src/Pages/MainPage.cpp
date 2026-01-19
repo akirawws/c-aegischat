@@ -243,10 +243,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
-    case WM_COMMAND: {
-        if (LOWORD(wParam) == 1001) {
-            SendPrivateMessageFromUI();
+        // MainPage.cpp
+ case WM_COMMAND: {
+        // Обработка отправки сообщения (Enter)
+        if (LOWORD(wParam) == 1001) { 
+            SendPrivateMessageFromUI(); 
+            ScrollMessagesToBottom(); // Мгновенный скролл вниз
         }
+        // Обработка кнопки создания группы из диалога
         else if (LOWORD(wParam) == 2002) {
             HWND hDlg = GetParent((HWND)lParam);
             HWND hList = GetDlgItem(hDlg, 2001);
@@ -268,7 +272,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
-    }
+    } 
 
     case WM_MOUSEMOVE: {
         int x = LOWORD(lParam);

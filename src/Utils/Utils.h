@@ -19,6 +19,12 @@ struct ChatCache {
     bool fullyLoaded = false;
 };
 
+// Простейшее симметричное "шифрование" (XOR) содержимого сообщений.
+// Шифруем перед отправкой, расшифровываем после получения.
+// Важно: это защита "от любопытных глаз", а не криптостойкая безопасность.
+void EncryptMessage(char* buffer, size_t maxLen);
+void DecryptMessage(char* buffer, size_t maxLen);
+
 
 std::string GetAvatar(const std::string& name);
 std::string GetCurrentTimeStr();

@@ -15,6 +15,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <cstring>
 namespace fs = std::filesystem;
 
 
@@ -318,6 +319,9 @@ void ReceiveMessages() {
             cPkt.type = PACKET_CHAT_MESSAGE;
 
             if (ReceiveExact((char*)&cPkt + 1, sizeof(ChatMessagePacket) - 1)) {
+                // Расшифровываем текст сообщения перед отображением
+                DecryptMessage(cPkt.content, sizeof(cPkt.content));
+
                 std::string sender = cPkt.senderUsername;
                 std::string target = cPkt.targetUsername;
 
@@ -443,6 +447,9 @@ void ReceiveMessages() {
             ChatHistoryEntryPacket hPkt;
             hPkt.type = packetType;
             if (ReceiveExact((char*)&hPkt + 1, sizeof(ChatHistoryEntryPacket) - 1)) {
+                // История хранится в БД в зашифрованном виде — расшифровываем
+                DecryptMessage(hPkt.content, sizeof(hPkt.content));
+
                 ChatCache& cache = chatHistories[g_uiState.activeChatUser];
 
                 Message m;
@@ -517,6 +524,8 @@ void SendPrivateMessage(const std::string& target, const std::string& text) {
     strncpy(pkt.targetUsername, target.c_str(), sizeof(pkt.targetUsername) - 1);
     strncpy(pkt.content, text.c_str(), sizeof(pkt.content) - 1);
 
+    // Шифруем содержимое перед отправкой
+    EncryptMessage(pkt.content, sizeof(pkt.content));
 
     if (send(clientSocket, (char*)&pkt, sizeof(ChatMessagePacket), 0) != SOCKET_ERROR) {
         Message m;
@@ -562,6 +571,9 @@ void SendPrivateMessageFromUI() {
     strncpy(pkt.targetUsername, g_uiState.activeChatUser.c_str(), 63);
     
     memcpy(pkt.content, utf8Content, sizeof(pkt.content));
+
+    // Шифруем содержимое перед отправкой
+    EncryptMessage(pkt.content, sizeof(pkt.content));
 
     if (SendPacket((char*)&pkt, sizeof(ChatMessagePacket))) { 
         Message m;

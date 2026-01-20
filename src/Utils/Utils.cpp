@@ -2,9 +2,33 @@
 #include <cstdio>
 #include <algorithm>
 #include <filesystem>
+#include <cstring>
 namespace fs = std::filesystem;
 
 std::string g_cacheDir = "cache";
+
+// Простой ключ для XOR "шифрования" сообщений.
+// При желании его можно вынести в конфиг или сгенерировать динамически.
+static const char* kMessageXorKey = "AegisChatSecretKey";
+
+static void XorBuffer(char* buffer, size_t maxLen) {
+    if (!buffer || maxLen == 0 || !kMessageXorKey || !kMessageXorKey[0]) return;
+
+    size_t keyLen = std::strlen(kMessageXorKey);
+    size_t len = strnlen(buffer, maxLen);
+
+    for (size_t i = 0; i < len; ++i) {
+        buffer[i] ^= kMessageXorKey[i % keyLen];
+    }
+}
+
+void EncryptMessage(char* buffer, size_t maxLen) {
+    XorBuffer(buffer, maxLen);
+}
+
+void DecryptMessage(char* buffer, size_t maxLen) {
+    XorBuffer(buffer, maxLen);
+}
 
 std::string GetUserAvatarPath(const std::string& username) {
     if (username.empty()) return "";

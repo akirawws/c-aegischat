@@ -24,7 +24,11 @@ enum PacketType : uint8_t {
     PACKET_AVATAR_UPDATE = 16,
     PACKET_GET_AVATAR = 17,
     PACKET_AVATAR_DATA = 18,
-    PACKET_BIO_REPLACEMENT = 19
+    PACKET_BIO_REPLACEMENT = 19,
+
+    // E2EE (end-to-end encryption)
+    PACKET_E2EE_KEY = 20,
+    PACKET_E2EE_MESSAGE = 21
 };
 
 struct AuthPacket {
@@ -121,6 +125,27 @@ struct GetAvatarPacket {
 struct BioReplacementPacket {
     uint8_t type;
     char bio[256]; // Ограничим длину bio 256 символами
+};
+
+// --- E2EE packets ---
+// ECDH public key exchange (P-256). Public key blob is BCRYPT_ECCPUBLIC_BLOB (header + 64 bytes).
+// Server should only forward this packet; it cannot decrypt anything.
+struct E2EEKeyPacket {
+    uint8_t type;
+    char senderUsername[64];
+    char targetUsername[64];
+    uint8_t publicKeyBlob[72];
+};
+
+// Encrypted message payload (AES-256-GCM)
+struct E2EEMessagePacket {
+    uint8_t type;
+    char senderUsername[64];
+    char targetUsername[64];
+    uint16_t cipherLen;      // number of valid bytes in ciphertext[]
+    uint8_t nonce[12];       // GCM nonce
+    uint8_t tag[16];         // GCM tag
+    uint8_t ciphertext[768]; // ciphertext bytes
 };
 
 

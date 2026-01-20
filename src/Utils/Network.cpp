@@ -16,6 +16,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstring>
+#include "Utils/E2EE.h"
 namespace fs = std::filesystem;
 
 
@@ -29,6 +30,55 @@ int g_historyOffset = 0;
 bool g_isLoadingHistory = false;
 SOCKET clientSocket = INVALID_SOCKET;
 bool isConnected = false;
+
+// --- E2EE state (per peer chatKey) ---
+static std::map<std::string, E2EESessionState> g_e2eeSessions;
+static std::map<std::string, std::vector<std::string>> g_e2eePendingPlaintexts;
+
+static void SendE2EEKeyTo(const std::string& target) {
+    if (!isConnected || clientSocket == INVALID_SOCKET || target.empty()) return;
+
+    E2EESessionState& st = g_e2eeSessions[target];
+    if (!E2EEEnsureLocalKey(st)) return;
+
+    const auto& blob = E2EEGetLocalPublicKeyBlob(st);
+    if (blob.size() < 72) return;
+
+    E2EEKeyPacket pkt{};
+    pkt.type = PACKET_E2EE_KEY;
+    strncpy(pkt.senderUsername, userName.c_str(), 63);
+    strncpy(pkt.targetUsername, target.c_str(), 63);
+    memcpy(pkt.publicKeyBlob, blob.data(), 72);
+    SendPacket((char*)&pkt, sizeof(pkt));
+}
+
+static void TryFlushE2EEQueue(const std::string& target) {
+    auto it = g_e2eePendingPlaintexts.find(target);
+    if (it == g_e2eePendingPlaintexts.end() || it->second.empty()) return;
+
+    E2EESessionState& st = g_e2eeSessions[target];
+    if (!st.hasSessionKey) return;
+
+    // Send queued messages as E2EE packets
+    for (const auto& plain : it->second) {
+        E2EEMessagePacket mp{};
+        mp.type = PACKET_E2EE_MESSAGE;
+        strncpy(mp.senderUsername, userName.c_str(), 63);
+        strncpy(mp.targetUsername, target.c_str(), 63);
+
+        uint16_t cLen = 0;
+        if (!E2EEEncrypt(st,
+                         (const uint8_t*)plain.data(), plain.size(),
+                         mp.nonce, mp.tag,
+                         mp.ciphertext, sizeof(mp.ciphertext),
+                         cLen)) {
+            continue;
+        }
+        mp.cipherLen = cLen;
+        SendPacket((char*)&mp, sizeof(mp));
+    }
+    it->second.clear();
+}
 
 std::thread receiveThread;
 std::string userName = "User"; 
@@ -349,6 +399,85 @@ void ReceiveMessages() {
                 }
             }
         }
+        else if (packetType == PACKET_E2EE_KEY) {
+            E2EEKeyPacket kPkt{};
+            kPkt.type = packetType;
+            if (ReceiveExact((char*)&kPkt + 1, sizeof(E2EEKeyPacket) - 1)) {
+                std::string sender = kPkt.senderUsername;
+                std::string target = kPkt.targetUsername;
+
+                // Determine chatKey like for normal messages
+                std::string chatKey = (target == userName) ? sender : target;
+
+                E2EESessionState& st = g_e2eeSessions[chatKey];
+
+                // Ensure we have a local key (so we can derive, and also respond if needed)
+                E2EEEnsureLocalKey(st);
+
+                // Store remote key and derive session key
+                if (E2EESetRemotePublicKey(st, kPkt.publicKeyBlob, sizeof(kPkt.publicKeyBlob))) {
+                    if (E2EEDeriveSessionKey(st)) {
+                        // Flush any queued outgoing plaintexts once session is ready
+                        TryFlushE2EEQueue(chatKey);
+                    } else {
+                        // If we can't derive yet (missing local), try again after generating key
+                        if (E2EEEnsureLocalKey(st) && E2EEDeriveSessionKey(st)) {
+                            TryFlushE2EEQueue(chatKey);
+                        }
+                    }
+                }
+
+                // If peer initiated exchange, respond with our pubkey once
+                SendE2EEKeyTo(chatKey);
+            }
+        }
+        else if (packetType == PACKET_E2EE_MESSAGE) {
+            E2EEMessagePacket ePkt{};
+            ePkt.type = packetType;
+            if (ReceiveExact((char*)&ePkt + 1, sizeof(E2EEMessagePacket) - 1)) {
+                std::string sender = ePkt.senderUsername;
+                std::string target = ePkt.targetUsername;
+                std::string chatKey = (target == userName) ? sender : target;
+
+                E2EESessionState& st = g_e2eeSessions[chatKey];
+                if (!st.hasSessionKey) {
+                    // Trigger key exchange and drop (or keep) message; for now drop gracefully.
+                    SendE2EEKeyTo(chatKey);
+                    continue;
+                }
+
+                uint16_t clen = ePkt.cipherLen;
+                if (clen > sizeof(ePkt.ciphertext)) continue;
+
+                uint8_t plainBuf[1024];
+                size_t plainLen = 0;
+                if (!E2EEDecrypt(st,
+                                 ePkt.nonce, ePkt.tag,
+                                 ePkt.ciphertext, clen,
+                                 plainBuf, sizeof(plainBuf) - 1,
+                                 plainLen)) {
+                    continue;
+                }
+                plainBuf[plainLen] = 0;
+
+                Message m;
+                m.text = (const char*)plainBuf;
+                m.sender = sender;
+                m.isMine = (sender == userName);
+                m.timeStr = GetCurrentTimeStr();
+
+                ChatCache& cache = chatHistories[chatKey];
+                cache.messages.push_back(m);
+
+                if (g_uiState.activeChatUser == chatKey) {
+                    if (hMessageList) {
+                        InvalidateRect(hMessageList, NULL, TRUE);
+                        ScrollMessagesToBottom();
+                    }
+                }
+                if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+            }
+        }
         else if (packetType == PACKET_AVATAR_DATA) {
             AvatarHeader header;
             header.type = packetType;
@@ -561,28 +690,54 @@ void SendPrivateMessageFromUI() {
     
     WideCharToMultiByte(CP_UTF8, 0, wMsgBuf, -1, utf8Content, sizeof(utf8Content) - 1, NULL, NULL);
 
-    ChatMessagePacket pkt{};
-    pkt.type = PACKET_CHAT_MESSAGE;
+    // --- E2EE send path ---
+    std::string target = g_uiState.activeChatUser;
+    E2EESessionState& st = g_e2eeSessions[target];
 
-    memset(pkt.senderUsername, 0, 64);
-    memset(pkt.targetUsername, 0, 64);
+    // Ensure key exchange started
+    if (!st.hasSessionKey) {
+        SendE2EEKeyTo(target);
+        g_e2eePendingPlaintexts[target].push_back(std::string(utf8Content));
+        // UI: optimistically show plaintext locally
+        Message m;
+        m.text = utf8Content;
+        m.sender = userName;
+        m.isMine = true;
+        m.timeStr = GetCurrentTimeStr();
+        UpdateUserActivity(target);
+        chatHistories[target].messages.push_back(m);
+        messages.push_back(m);
 
-    strncpy(pkt.senderUsername, userName.c_str(), 63);
-    strncpy(pkt.targetUsername, g_uiState.activeChatUser.c_str(), 63);
-    
-    memcpy(pkt.content, utf8Content, sizeof(pkt.content));
+        SetWindowTextW(hInputEdit, L"");
+        InvalidateRect(hMessageList, NULL, TRUE);
+        if (hMainWnd) InvalidateRect(hMainWnd, NULL, FALSE);
+        if (hMessageList) ScrollMessagesToBottom();
+        return;
+    }
 
-    // Шифруем содержимое перед отправкой
-    EncryptMessage(pkt.content, sizeof(pkt.content));
+    E2EEMessagePacket mp{};
+    mp.type = PACKET_E2EE_MESSAGE;
+    strncpy(mp.senderUsername, userName.c_str(), 63);
+    strncpy(mp.targetUsername, target.c_str(), 63);
 
-    if (SendPacket((char*)&pkt, sizeof(ChatMessagePacket))) { 
+    uint16_t cLen = 0;
+    if (!E2EEEncrypt(st,
+                     (const uint8_t*)utf8Content, strlen(utf8Content),
+                     mp.nonce, mp.tag,
+                     mp.ciphertext, sizeof(mp.ciphertext),
+                     cLen)) {
+        return;
+    }
+    mp.cipherLen = cLen;
+
+    if (SendPacket((char*)&mp, sizeof(E2EEMessagePacket))) { 
         Message m;
         m.text = utf8Content; 
         m.sender = userName;
         m.isMine = true;
         m.timeStr = GetCurrentTimeStr();
-        UpdateUserActivity(g_uiState.activeChatUser);
-        chatHistories[g_uiState.activeChatUser].messages.push_back(m);
+        UpdateUserActivity(target);
+        chatHistories[target].messages.push_back(m);
         messages.push_back(m); 
 
         SetWindowTextW(hInputEdit, L"");

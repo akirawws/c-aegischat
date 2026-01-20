@@ -212,6 +212,26 @@ void HandleClient(SOCKET client_socket) {
                 }
             }
         }
+        else if (packetType == PACKET_E2EE_KEY) {
+            E2EEKeyPacket* kPkt = (E2EEKeyPacket*)buffer;
+            std::string target = kPkt->targetUsername;
+
+            // Server just forwards key exchange packets
+            std::lock_guard<std::mutex> lock(users_mutex);
+            if (onlineUsers.count(target)) {
+                send(onlineUsers[target], (char*)kPkt, sizeof(E2EEKeyPacket), 0);
+            }
+        }
+        else if (packetType == PACKET_E2EE_MESSAGE) {
+            E2EEMessagePacket* mPkt = (E2EEMessagePacket*)buffer;
+            std::string target = mPkt->targetUsername;
+
+            // Server just forwards encrypted messages; it cannot decrypt.
+            std::lock_guard<std::mutex> lock(users_mutex);
+            if (onlineUsers.count(target)) {
+                send(onlineUsers[target], (char*)mPkt, sizeof(E2EEMessagePacket), 0);
+            }
+        }
         else if (packetType == PACKET_DISPLAY_NAME_REPLACEMENT) {
             DisplayNameReplacementPacket* dPkt = (DisplayNameReplacementPacket*)buffer;
             
